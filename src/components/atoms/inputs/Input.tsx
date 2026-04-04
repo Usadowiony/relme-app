@@ -10,16 +10,17 @@ type InputProps = {
 } & InputHTMLAttributes<HTMLInputElement>
 
 const baseLabelClassName =
-  'mb-2 block font-manrope text-[10px] font-semibold uppercase tracking-[0.6px] text-dark'
+  'pl-[8px] mb-2 block font-manrope text-[9px] 2xs:text-[10px] font-semibold uppercase tracking-[0.6px] text-dark transition-colors duration-200 group-focus-within:text-primary'
 
 const baseInputClassName =
-  'w-full rounded-2xl bg-[rgba(217,222,226,0.3)] px-4 py-4 font-manrope text-base text-dark placeholder:text-dark/50 ring-1 ring-inset ring-[#EAEAEA] outline-none transition-colors duration-200 focus:ring-dark/35'
+  'w-full rounded-2xl bg-[#D9DEE2]/30 px-4 py-3 2xs:py-4 font-manrope text-[14px] text-dark placeholder:text-dark/50 ring-1 ring-inset ring-[#EAEAEA] outline-none transition-colors duration-200 focus:ring-[1.5px] focus:ring-primary'
 
 export function Input({
   label,
   fullWidth = true,
   inputWidth,
   id,
+  placeholder,
   labelClassName = '',
   wrapperClassName = '',
   inputClassName = '',
@@ -30,7 +31,7 @@ export function Input({
 
   return (
     <div
-      className={`${fullWidth ? 'w-full' : 'w-auto'} ${wrapperClassName}`.trim()}
+      className={`${fullWidth ? 'w-full' : 'w-auto'} group ${wrapperClassName}`.trim()}
       style={!fullWidth && inputWidth ? { width: `${inputWidth}px` } : undefined}
     >
       <label htmlFor={resolvedId} className={`${baseLabelClassName} ${labelClassName} pl-[4px]`.trim()}>
@@ -39,6 +40,7 @@ export function Input({
       <input
         id={resolvedId}
         type={type}
+        placeholder={placeholder}
         className={`${baseInputClassName} ${inputClassName}`.trim()}
         {...props}
       />

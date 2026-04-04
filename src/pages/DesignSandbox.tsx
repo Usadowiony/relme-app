@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import googleLogo from '../assets/icons/google-logo.svg'
-import Button from '../components/atoms/Button'
-import Input from '../components/atoms/Input'
-import PasswordInput from '../components/atoms/PasswordInput'
-import SegmentedControl from '../components/atoms/SegmentedControl'
+import Button from '../components/atoms/buttons/Button'
+import Input from '../components/atoms/inputs/Input'
+import PasswordInput from '../components/atoms/inputs/PasswordInput'
+import SegmentedControl from '../components/atoms/buttons/SegmentedControl'
 
 const colorSwatches = [
   { name: 'Primary', hex: '#245A65', bgClass: 'bg-primary', textClass: 'text-white' },

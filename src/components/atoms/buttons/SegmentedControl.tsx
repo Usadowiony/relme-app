@@ -46,7 +46,7 @@ export function SegmentedControl({
 
   return (
     <div
-      className={`relative inline-flex rounded-full bg-gray p-[6px] ${fullWidth && distribution === 'equal' ? 'w-full' : 'w-auto'} ${className}`.trim()}
+      className={`relative inline-flex rounded-full bg-[#D9DEE2]/30 p-[6px] sm:p-[4px] ${fullWidth && distribution === 'equal' ? 'w-full' : 'w-auto'} ${className}`.trim()}
       role="tablist"
       aria-label={ariaLabel}
     >
@@ -69,9 +69,9 @@ export function SegmentedControl({
             disabled={option.disabled}
             onClick={() => onChange(option.value)}
             className={[
-              'relative z-10 rounded-full px-8 py-4 font-inter text-sm font-bold text-center transition-colors duration-200',
+              'relative z-10 rounded-full px-8 py-3 2xs:py-4 font-inter text-[10px] 2xs:text-[12px] sm:text-[14px] font-semibold text-center transition-colors duration-200',
               distribution === 'equal' ? 'flex-1' : '',
-              isActive ? 'text-dark' : 'text-dark/75 hover:text-dark',
+              isActive ? 'text-black' : 'text-black/75 hover:text-black',
               option.disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
             ].join(' ')}
             style={distribution === 'fixed' ? { width: `${itemWidth}px` } : undefined}

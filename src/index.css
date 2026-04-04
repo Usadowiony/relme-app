@@ -39,13 +39,21 @@
   --font-weight-bold: 700;
   --font-weight-extrabold: 800;
 
+  /* --- Shadow --- */
+  --shadow-soft: 0 4px 4px 0 rgba(28, 28, 28, 0.10);
+  --shadow-large: 0 4px 14px 1px rgba(28, 28, 28, 0.12);
+
   /* --- BREAKPOINTS --- */
   --breakpoint-2xs: 360px;
   --breakpoint-xs: 420px;
+  --breakpoint-2sm: 580px;
   --breakpoint-sm: 640px;
   --breakpoint-md: 768px;
   --breakpoint-lg: 1024px;
   --breakpoint-xl: 1280px;
+  --breakpoint-2xl: 1536px;  /* duże laptopy */
+  --breakpoint-3xl: 1900px;  /* full HD */
+  --breakpoint-4xl: 2500px;  /* 1440p / 2K */
 }
 
 /* Globalne przypisania bazowe */
