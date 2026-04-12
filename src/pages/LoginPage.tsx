@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import googleLogo from '../assets/icons/google-logo.svg'
+import logoLong from '../assets/icons/logo-long.svg'
 import Button from '../components/atoms/buttons/Button'
 import SegmentedControl from '../components/atoms/buttons/SegmentedControl'
 import Input from '../components/atoms/inputs/Input'
@@ -21,11 +22,15 @@ function LoginPage() {
 
   return (
     <BackgroundBlobs>
-      <main className="flex flex-col justify-center min-h-screen bg-white sm:bg-transparent text-dark">
-        <TopNavigation className="hidden" />
+      <main className="flex flex-col min-h-screen bg-white sm:bg-transparent text-dark lg:max-w-5xl 2xl:max-w-[1440px] mx-auto w-full">
+        <TopNavigation
+          className="hidden md:block"
+          leftSlot={<img src={logoLong} alt="Relme" className="h-8 w-auto" />}
+        />
 
-        <div className="mx-auto w-full max-w-[420px] 2sm:max-w-[480px] sm:max-w-[600px] px-6 xs:px-10 ">
-          <div className='sm:bg-white sm:shadow-large sm:rounded-[32px] sm:p-14'>
+        <div className="flex-1 flex items-center">
+          <div className="mx-auto w-full max-w-[420px] 2sm:max-w-[480px] sm:max-w-[600px] px-6 xs:px-10 ">
+            <div className='sm:bg-white sm:shadow-large sm:rounded-[32px] sm:p-14'>
             <h1 className="sm:text-center font-manrope text-[36px] xs:text-[40px] font-semibold tracking-[-0.8px] text-dark">
               {isRegisterMode ? 'Utwórz konto' : 'Witaj ponownie'}
             </h1>
@@ -117,6 +122,7 @@ function LoginPage() {
 
             <div className="mt-10 2xs:mt-12 2sm:mt-14 w-full">
               <Button fullWidth>{isRegisterMode ? 'Zarejestruj się' : 'Zaloguj się'}</Button>
+            </div>
             </div>
           </div>
         </div>

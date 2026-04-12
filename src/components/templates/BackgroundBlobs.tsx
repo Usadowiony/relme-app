@@ -45,7 +45,7 @@ export function BackgroundBlobs({ children }: BackgroundBlobsLayoutProps) {
             <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-50 bg-gradient-to-b from-neutral to-transparent" />
             <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-50 bg-gradient-to-t from-neutral to-transparent" />
 
-            <main className="relative z-10 w-full max-w-[1126px]">
+            <main className="relative z-10 w-full">
                 {children}
             </main>
             
