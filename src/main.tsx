@@ -1,24 +1,53 @@
-import { StrictMode } from 'react'
+import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import DesignSandbox from './pages/DesignSandbox.tsx'
 import LoginPage from './pages/LoginPage.tsx'
+import { AuthProvider, useAuth } from './auth/AuthProvider.tsx'
+import { ProtectedRoute } from './auth/ProtectedRoute.tsx'
 
 function RootRoute() {
-  if (window.location.pathname === '/login') {
+  const { session, loading } = useAuth()
+  const [pathname, setPathname] = useState(window.location.pathname)
+
+  useEffect(() => {
+    const handlePopState = () => setPathname(window.location.pathname)
+
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
+
+  useEffect(() => {
+    if (loading) {
+      return
+    }
+
+    if (session && pathname === '/login') {
+      window.history.replaceState({}, '', '/')
+      setPathname('/')
+    }
+  }, [loading, pathname, session])
+
+  if (pathname === '/login') {
     return <LoginPage />
   }
 
-  if (window.location.pathname === '/design') {
+  if (pathname === '/design') {
     return <DesignSandbox />
   }
 
-  return <App />
+  return (
+    <ProtectedRoute>
+      <App />
+    </ProtectedRoute>
+  )
 }
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <RootRoute />
+    <AuthProvider>
+      <RootRoute />
+    </AuthProvider>
   </StrictMode>,
 )
