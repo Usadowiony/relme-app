@@ -4,6 +4,7 @@ import Button from '../components/atoms/buttons/Button'
 import Input from '../components/atoms/inputs/Input'
 import PasswordInput from '../components/atoms/inputs/PasswordInput'
 import SegmentedControl from '../components/atoms/buttons/SegmentedControl'
+import Toast from '../components/atoms/popups/Toast'
 
 const colorSwatches = [
   { name: 'Primary', hex: '#245A65', bgClass: 'bg-primary', textClass: 'text-white' },
@@ -49,9 +50,49 @@ function DesignSandbox() {
   const [authMode, setAuthMode] = useState('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [toastState, setToastState] = useState<{
+    open: boolean
+    type: 'success' | 'warning' | 'error' | 'info'
+    title: string
+    message: string
+    position: 'top' | 'bottom'
+    durationMs: number
+  }>({
+    open: false,
+    type: 'info',
+    title: '',
+    message: '',
+    position: 'top',
+    durationMs: 5000,
+  })
+
+  const showToast = (scenario: {
+    type: 'success' | 'warning' | 'error' | 'info'
+    title: string
+    message: string
+    position: 'top' | 'bottom'
+    durationMs: number
+  }) => {
+    setToastState({
+      open: true,
+      ...scenario,
+    })
+  }
 
   return (
     <main className="min-h-screen bg-neutral text-dark">
+      <Toast
+        open={toastState.open}
+        type={toastState.type}
+        title={toastState.title}
+        message={toastState.message}
+        position={toastState.position}
+        durationMs={toastState.durationMs}
+        onClose={() => {
+          setToastState((previous) => ({ ...previous, open: false }))
+        }}
+      />
+
       <div className="mx-auto w-full max-w-6xl px-6 py-12 md:py-16">
         <header>
           <p className="font-manrope text-[10px] font-semibold uppercase tracking-[0.6px] text-dark/70">
@@ -187,6 +228,74 @@ function DesignSandbox() {
               onActionClick={() => {}}
               wrapperClassName="mt-6"
             />
+          </div>
+        </section>
+
+        <section className="mt-10">
+          <h2 className="mb-4 text-left font-manrope text-[10px] font-semibold uppercase tracking-[0.6px] text-dark/70">
+            Toast Scenarios
+          </h2>
+
+          <div className="rounded-[28px] border border-gray/70 bg-white p-6 md:p-8">
+            <div className="flex flex-wrap gap-3">
+              <Button
+                onClick={() => {
+                  showToast({
+                    type: 'success',
+                    title: 'Sukces',
+                    message: 'Profil został zapisany poprawnie.',
+                    position: 'top',
+                    durationMs: 15000,
+                  })
+                }}
+              >
+                Success Top
+              </Button>
+
+              <Button
+                variant="social"
+                onClick={() => {
+                  showToast({
+                    type: 'warning',
+                    title: 'Mamy problem!',
+                    message: 'Zostało mało czasu na weryfikację kodu.',
+                    position: 'top',
+                    durationMs: 17000,
+                  })
+                }}
+              >
+                Warning Top
+              </Button>
+
+              <Button
+                onClick={() => {
+                  showToast({
+                    type: 'error',
+                    title: 'Błąd',
+                    message: 'Nie udało się zapisać zmian. Spróbuj ponownie.',
+                    position: 'bottom',
+                    durationMs: 16000,
+                  })
+                }}
+              >
+                Error Bottom
+              </Button>
+
+              <Button
+                variant="social"
+                onClick={() => {
+                  showToast({
+                    type: 'info',
+                    title: 'Informacja',
+                    message: 'Trwa synchronizacja danych konta.',
+                    position: 'bottom',
+                    durationMs: 13000,
+                  })
+                }}
+              >
+                Info Bottom
+              </Button>
+            </div>
           </div>
         </section>
       </div>

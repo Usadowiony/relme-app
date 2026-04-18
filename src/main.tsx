@@ -4,8 +4,10 @@ import './index.css'
 import App from './App.tsx'
 import DesignSandbox from './pages/DesignSandbox.tsx'
 import LoginPage from './pages/LoginPage.tsx'
+import EmailVerificationPage from './pages/EmailVerificationPage.tsx'
 import { AuthProvider, useAuth } from './auth/AuthProvider.tsx'
 import { ProtectedRoute } from './auth/ProtectedRoute.tsx'
+import { ProfileGate } from './auth/ProfileGate.tsx'
 
 function RootRoute() {
   const { session, loading } = useAuth()
@@ -23,7 +25,7 @@ function RootRoute() {
       return
     }
 
-    if (session && pathname === '/login') {
+    if (session && (pathname === '/login' || pathname === '/verify-email')) {
       window.history.replaceState({}, '', '/')
       setPathname('/')
     }
@@ -33,13 +35,19 @@ function RootRoute() {
     return <LoginPage />
   }
 
+  if (pathname === '/verify-email') {
+    return <EmailVerificationPage />
+  }
+
   if (pathname === '/design') {
     return <DesignSandbox />
   }
 
   return (
     <ProtectedRoute>
-      <App />
+      <ProfileGate>
+        <App />
+      </ProfileGate>
     </ProtectedRoute>
   )
 }
