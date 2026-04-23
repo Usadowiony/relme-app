@@ -13,6 +13,8 @@ export type Profile = {
   updated_at: string
 }
 
+export type ProfileGender = 'male' | 'female' | 'other'
+
 export type ProfileUpdates = Partial<
   Pick<
     Profile,
@@ -86,4 +88,17 @@ export async function updateMyProfile(updates: ProfileUpdates) {
   }
 
   return data
+}
+
+function toNormalizedText(value: string | null) {
+  return value?.trim() ?? ''
+}
+
+export function isProfileOnboardingComplete(profile: Profile) {
+  const hasFirstName = toNormalizedText(profile.first_name).length > 0
+  const hasLastName = toNormalizedText(profile.last_name).length > 0
+  const hasGender = toNormalizedText(profile.gender).length > 0
+  const hasDateOfBirth = Boolean(profile.date_of_birth)
+
+  return hasFirstName && hasLastName && hasGender && hasDateOfBirth
 }

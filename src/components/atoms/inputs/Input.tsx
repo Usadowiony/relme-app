@@ -10,10 +10,10 @@ type InputProps = {
 } & InputHTMLAttributes<HTMLInputElement>
 
 const baseLabelClassName =
-  'pl-[8px] mb-2 block font-manrope text-[9px] 2xs:text-[10px] font-semibold uppercase tracking-[0.6px] text-dark transition-colors duration-200 group-focus-within:text-primary'
+  'pl-[8px] mb-2 block font-manrope text-[11px] font-semibold uppercase tracking-[0.6px] text-dark transition-colors duration-200 group-focus-within:text-primary'
 
 const baseInputClassName =
-  'w-full rounded-2xl bg-[#D9DEE2]/30 px-4 py-3 2xs:py-4 font-manrope text-[14px] text-dark placeholder:text-dark/50 ring-1 ring-inset ring-[#EAEAEA] outline-none transition-colors duration-200 focus:ring-[1.5px] focus:ring-primary'
+  'box-border w-full min-w-0 max-w-full rounded-2xl bg-[#D9DEE2]/30 px-4 py-3 2xs:py-4 font-manrope text-base text-dark placeholder:text-dark/50 ring-1 ring-inset ring-[#EAEAEA] outline-none transition-colors duration-200 focus:ring-[1.5px] focus:ring-primary'
 
 export function Input({
   label,
@@ -28,10 +28,14 @@ export function Input({
   ...props
 }: InputProps) {
   const resolvedId = id ?? props.name ?? label.toLowerCase().replace(/\s+/g, '-')
+  const dateInputClassName =
+    type === 'date'
+      ? 'date-input-fix [color-scheme:light] appearance-none [&::-webkit-datetime-edit]:w-full [&::-webkit-date-and-time-value]:text-left'
+      : ''
 
   return (
     <div
-      className={`${fullWidth ? 'w-full' : 'w-auto'} group ${wrapperClassName}`.trim()}
+      className={`${fullWidth ? 'w-full' : 'w-auto'} min-w-0 group ${wrapperClassName}`.trim()}
       style={!fullWidth && inputWidth ? { width: `${inputWidth}px` } : undefined}
     >
       <label htmlFor={resolvedId} className={`${baseLabelClassName} ${labelClassName} pl-[4px]`.trim()}>
@@ -41,7 +45,7 @@ export function Input({
         id={resolvedId}
         type={type}
         placeholder={placeholder}
-        className={`${baseInputClassName} ${inputClassName}`.trim()}
+        className={`${baseInputClassName} ${dateInputClassName} ${inputClassName}`.trim()}
         {...props}
       />
     </div>
