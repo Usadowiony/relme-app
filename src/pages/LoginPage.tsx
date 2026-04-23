@@ -17,6 +17,18 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const uppercasePattern = /[A-Z]/
 const specialCharacterPattern = /[^A-Za-z0-9]/
 
+function resolveOAuthRedirectUrl() {
+  const configuredPublicUrl = import.meta.env.VITE_PUBLIC_APP_URL?.trim()
+  const normalizedPublicUrl = configuredPublicUrl?.replace(/\/+$/, '')
+  const isLocalhost =
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1'
+
+  const baseUrl = isLocalhost && normalizedPublicUrl ? normalizedPublicUrl : window.location.origin
+
+  return `${baseUrl}/login`
+}
+
 function clearPendingSignupSession() {
   sessionStorage.removeItem('pending_signup_email')
   sessionStorage.removeItem('pending_signup_password')
@@ -307,7 +319,7 @@ function LoginPage() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/login`,
+        redirectTo: resolveOAuthRedirectUrl(),
       },
     })
 
@@ -331,25 +343,25 @@ function LoginPage() {
         }}
       />
 
-      <main className="flex flex-col min-h-screen bg-white sm:bg-transparent text-dark lg:max-w-5xl 2xl:max-w-[1440px] mx-auto w-full">
+      <main className="flex flex-col min-h-screen bg-neutral sm:bg-transparent text-dark lg:max-w-5xl 2xl:max-w-[1440px] mx-auto w-full">
         <TopNavigation
           className="hidden md:block"
           leftSlot={<img src={logoLong} alt="Relme" className="h-8 w-auto" />}
         />
 
-        <div className="flex-1 flex items-center">
+        <div className="flex-1 flex items-center my-10">
           <div className="mx-auto w-full max-w-[420px] 2sm:max-w-[480px] sm:max-w-[600px] px-6 xs:px-10 ">
             <div className='sm:bg-white sm:shadow-large sm:rounded-[32px] sm:p-14'>
             <h1 className="sm:text-center font-manrope text-[36px] xs:text-[40px] font-semibold tracking-[-0.8px] text-dark">
               {isRegisterMode ? 'Utwórz konto' : 'Witaj ponownie'}
             </h1>
-            <p className="sm:text-center mt-2 font-manrope text-[16px] 2xs:text-[18px] font-normal tracking-[-0.4px] text-dark/85">
+            <p className="sm:text-center sm:mt-2 font-manrope text-[18px] font-normal tracking-[-0.4px] text-dark/85">
               {isRegisterMode
                 ? 'Dołącz do naszej świadomej społeczności.'
                 : 'Zaloguj się do swojego panelu.'}
             </p>
 
-            <div className="mt-6 2xs:mt-10 2sm:mt-14 w-full">
+            <div className="mt-6 2xs:mt-8 2sm:mt-14 w-full">
               <SegmentedControl
                 value={authMode}
                 onChange={(value) => setAuthMode(value as AuthMode)}
@@ -362,7 +374,7 @@ function LoginPage() {
               />
             </div>
 
-            <div className="mt-6 2xs:mt-8 2sm:mt-10 w-full">
+            <div className="mt-4 2xs:mt-6 2sm:mt-10 w-full">
               <Button
                 fullWidth
                 variant="social"
@@ -374,14 +386,14 @@ function LoginPage() {
               </Button>
             </div>
 
-            <div className="mt-6 2xs:mt-8 2sm:mt-10 flex items-center gap-4">
+            <div className="mt-4 2xs:mt-6 2sm:mt-10 flex items-center gap-4">
               <span className="h-px flex-1 bg-dark/10" />
-              <span className="font-manrope text-[10px] font-semibold uppercase tracking-[0.6px] text-dark/50">
+              <span className="font-manrope text-[11px] font-semibold uppercase tracking-[0.6px] text-dark/50">
                 LUB EMAIL
               </span>
               <span className="h-px flex-1 bg-dark/10" />
             </div>
-            <form className="mt-6 2xs:mt-8 2sm:mt-10" onSubmit={handleAuthSubmit}>
+            <form className="mt-4 2xs:mt-6 2sm:mt-10" onSubmit={handleAuthSubmit}>
               <Input
                 fullWidth
                 label="Adres email"
@@ -423,7 +435,7 @@ function LoginPage() {
                 onVisibilityChange={setShowPasswords}
                 actionLabel={isRegisterMode ? undefined : 'Nie pamiętasz hasła?'}
                 onActionClick={isRegisterMode ? undefined : () => {}}
-                wrapperClassName="mt-8"
+                wrapperClassName="mt-4 sm:mt-8"
                 disabled={isSubmitting}
                 autoComplete={isRegisterMode ? 'new-password' : 'current-password'}
               />
@@ -441,7 +453,7 @@ function LoginPage() {
               <div
                 className={`grid overflow-hidden origin-top transition-all duration-300 ease-out ${
                   isRegisterMode
-                    ? 'mt-8 grid-rows-[1fr] opacity-100 translate-y-0'
+                    ? 'mt-4 sm:mt-8 grid-rows-[1fr] opacity-100 translate-y-0'
                     : 'mt-0 grid-rows-[0fr] opacity-0 -translate-y-2 pointer-events-none'
                 }`}
                 aria-hidden={!isRegisterMode}
@@ -476,7 +488,7 @@ function LoginPage() {
                 </div>
               </div>
 
-              <div className="mt-10 2xs:mt-12 2sm:mt-14 w-full">
+              <div className="mt-6 2xs:mt-8 2sm:mt-14 w-full">
                 <Button fullWidth type="submit" disabled={isSubmitting}>
                   {isRegisterMode ? 'Zarejestruj się' : 'Zaloguj się'}
                 </Button>

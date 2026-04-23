@@ -18,9 +18,9 @@ export function Button({
 }: ButtonProps) {
 	const variantClasses = {
 		primary:
-			'bg-primary px-8 py-3 2xs:py-4 font-inter text-[14px] 2xs:text-base font-bold text-white hover:bg-primary/90',
+			'bg-primary px-8 py-4 font-inter text-[14px] 2xs:text-base font-bold text-white hover:bg-primary/90',
 		social:
-			'border border-gray bg-transparent px-[28px] py-3 2xs:py-4 font-manrope text-[12px] 2xs:text-base font-semibold tracking-[-0.4px] text-dark hover:border-dark hover:bg-gray/40 hover:text-black',
+			'border border-gray bg-transparent px-[28px] py-4 font-manrope text-[14px] 2xs:text-base font-semibold tracking-[-0.4px] text-dark hover:border-dark hover:bg-gray/40 hover:text-black',
 	}
 
 	return (

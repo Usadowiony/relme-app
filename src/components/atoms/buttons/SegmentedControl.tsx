@@ -69,7 +69,7 @@ export function SegmentedControl({
             disabled={option.disabled}
             onClick={() => onChange(option.value)}
             className={[
-              'relative z-10 rounded-full px-7 2xs:px-8 py-3 2xs:py-4 font-inter text-[11px] 2xs:text-[12px] sm:text-[14px] font-semibold text-center transition-colors duration-200',
+              'relative z-10 rounded-full py-3 2xs:py-4 font-inter text-[12px] sm:text-[14px] font-semibold text-center transition-colors duration-200',
               distribution === 'equal' ? 'flex-1' : '',
               isActive ? 'text-black' : 'text-black/75 hover:text-black',
               option.disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',

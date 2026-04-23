@@ -5,6 +5,7 @@ import App from './App.tsx'
 import DesignSandbox from './pages/DesignSandbox.tsx'
 import LoginPage from './pages/LoginPage.tsx'
 import EmailVerificationPage from './pages/EmailVerificationPage.tsx'
+import OnboardingPage from './pages/OnboardingPage.tsx'
 import { AuthProvider, useAuth } from './auth/AuthProvider.tsx'
 import { ProtectedRoute } from './auth/ProtectedRoute.tsx'
 import { ProfileGate } from './auth/ProfileGate.tsx'
@@ -41,6 +42,16 @@ function RootRoute() {
 
   if (pathname === '/design') {
     return <DesignSandbox />
+  }
+
+  if (pathname === '/onboarding') {
+    return (
+      <ProtectedRoute>
+        <ProfileGate>
+          <OnboardingPage />
+        </ProfileGate>
+      </ProtectedRoute>
+    )
   }
 
   return (

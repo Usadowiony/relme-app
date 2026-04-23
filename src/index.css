@@ -63,4 +63,29 @@
     font-family: var(--font-inter);
     font-size: var(--text-base);
   }
+
+  input.date-input-fix[type='date'] {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  input.date-input-fix[type='date']::-webkit-datetime-edit {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    padding: 0;
+  }
+
+  input.date-input-fix[type='date']::-webkit-date-and-time-value {
+    display: inline-block;
+    min-width: 0;
+    text-align: left;
+  }
+
+  input.date-input-fix[type='date']::-webkit-calendar-picker-indicator {
+    margin: 0;
+  }
 }

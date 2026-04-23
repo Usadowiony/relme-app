@@ -15,10 +15,10 @@ type PasswordInputProps = {
 } & Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>
 
 const baseLabelClassName =
-  'block pl-[8px] font-manrope text-[9px] 2xs:text-[10px] font-semibold uppercase tracking-[0.6px] text-dark transition-colors duration-200'
+  'block pl-[8px] font-manrope text-[11px] font-semibold uppercase tracking-[0.6px] text-dark transition-colors duration-200'
 
 const baseInputClassName =
-  'w-full rounded-2xl bg-[#D9DEE2]/30 px-4 px-4 py-3 2xs:py-4 pr-12 font-manrope text-[14px] 2xs:text text-dark placeholder:text-dark/50 ring-1 ring-inset ring-[#EAEAEA] outline-none transition-colors duration-200 focus:ring-[1.5px] focus:ring-primary'
+  'w-full rounded-2xl bg-[#D9DEE2]/30 px-4 px-4 py-3 2xs:py-4 pr-12 font-manrope text-base text-dark placeholder:text-dark/50 ring-1 ring-inset ring-[#EAEAEA] outline-none transition-colors duration-200 focus:ring-[1.5px] focus:ring-primary'
 
 export function PasswordInput({
   label,
