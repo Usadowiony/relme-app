@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
-import BackgroundGlow from '../atoms/VisualBlob/BackgroundGlow'
-import VisualBlob from '../atoms/VisualBlob/VisualBlob'
+import BackgroundGlow from '../ui/VisualBlob/BackgroundGlow'
+import VisualBlob from '../ui/VisualBlob/VisualBlob'
 
 type BackgroundBlobsLayoutProps = {
     children: ReactNode

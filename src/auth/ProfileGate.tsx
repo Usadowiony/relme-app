@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { supabase } from '../lib/supabaseClient'
-import { getMyProfile, isProfileOnboardingComplete, type Profile } from '../profile/profileApi'
+import { supabase } from '../api/supabase'
+import { getMyProfile, isProfileOnboardingComplete, type Profile } from '../api/profile.api'
 import { useAuth } from './AuthProvider'
 import ProfileErrorView from './ProfileErrorView'
 

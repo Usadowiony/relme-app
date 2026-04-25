@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { MailCheck } from 'lucide-react'
 import logoLong from '../assets/icons/logo-long.svg'
-import Button from '../components/atoms/buttons/Button'
-import Toast from '../components/atoms/popups/Toast'
-import TopNavigation from '../components/organisms/Navbar/TopNavigation'
-import BackgroundBlobs from '../components/templates/BackgroundBlobs'
-import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
+import Button from '../components/ui/buttons/Button'
+import Toast from '../components/ui/popups/Toast'
+import TopNavigation from '../components/layout/Navbar/TopNavigation'
+import BackgroundBlobs from '../components/layout/BackgroundBlobs'
+import { isSupabaseConfigured, supabase } from '../api/supabase'
 
 const OTP_LENGTH = 6
 

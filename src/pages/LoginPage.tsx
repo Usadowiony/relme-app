@@ -1,332 +1,62 @@
-import { useEffect, useState, type FormEvent } from 'react'
 import googleLogo from '../assets/icons/google-logo.svg'
 import logoLong from '../assets/icons/logo-long.svg'
-import Button from '../components/atoms/buttons/Button'
-import SegmentedControl from '../components/atoms/buttons/SegmentedControl'
-import Input from '../components/atoms/inputs/Input'
-import PasswordInput from '../components/atoms/inputs/PasswordInput'
-import Toast from '../components/atoms/popups/Toast'
-import TopNavigation from '../components/organisms/Navbar/TopNavigation'
-import BackgroundBlobs from '../components/templates/BackgroundBlobs'
-import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
-
-type AuthMode = 'login' | 'register'
-
-const PENDING_SIGNUP_TTL_MS = 15 * 60 * 1000
-const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const uppercasePattern = /[A-Z]/
-const specialCharacterPattern = /[^A-Za-z0-9]/
-
-function resolveOAuthRedirectUrl() {
-  const configuredPublicUrl = import.meta.env.VITE_PUBLIC_APP_URL?.trim()
-  const normalizedPublicUrl = configuredPublicUrl?.replace(/\/+$/, '')
-  const isLocalhost =
-    window.location.hostname === 'localhost' ||
-    window.location.hostname === '127.0.0.1'
-
-  const baseUrl = isLocalhost && normalizedPublicUrl ? normalizedPublicUrl : window.location.origin
-
-  return `${baseUrl}/login`
-}
-
-function clearPendingSignupSession() {
-  sessionStorage.removeItem('pending_signup_email')
-  sessionStorage.removeItem('pending_signup_password')
-  sessionStorage.removeItem('pending_signup_started_at')
-  localStorage.removeItem('pending_signup_email')
-  localStorage.removeItem('pending_signup_password')
-  localStorage.removeItem('pending_signup_started_at')
-}
-
-function mapSignInErrorMessage(message: string) {
-  const normalized = message.toLowerCase()
-
-  if (normalized.includes('missing email or phone')) {
-    return 'Musisz wypełnić wszystkie wymagane pola.'
-  }
-
-  if (normalized.includes('invalid login credentials')) {
-    return 'Nieprawidłowy adres email lub hasło.'
-  }
-
-  if (normalized.includes('email not confirmed')) {
-    return 'Adres email nie został jeszcze potwierdzony. Dokończ aktywację konta.'
-  }
-
-  return message
-}
-
-function mapSignUpErrorMessage(message: string) {
-  const normalized = message.toLowerCase()
-
-  if (normalized.includes('anonymous sign-ins are disabled')) {
-    return 'Musisz wypełnić wszystkie wymagane pola.'
-  }
-
-  if (
-    normalized.includes('user already registered') ||
-    normalized.includes('already been registered')
-  ) {
-    return 'Konto dla tego adresu już istnieje. Zaloguj się odpowiednią metodą (Email lub Google).'
-  }
-
-  return message
-}
-
-function useAnimatedFieldError(errorMessage: string, shouldShow: boolean) {
-  const [content, setContent] = useState('')
-  const [isVisible, setIsVisible] = useState(false)
-
-  useEffect(() => {
-    let hideTimer: number | undefined
-    let frameId: number | undefined
-
-    if (shouldShow && errorMessage) {
-      setContent(errorMessage)
-      frameId = window.requestAnimationFrame(() => {
-        setIsVisible(true)
-      })
-    } else {
-      setIsVisible(false)
-      hideTimer = window.setTimeout(() => {
-        setContent('')
-      }, 220)
-    }
-
-    return () => {
-      if (hideTimer) {
-        window.clearTimeout(hideTimer)
-      }
-
-      if (frameId) {
-        window.cancelAnimationFrame(frameId)
-      }
-    }
-  }, [errorMessage, shouldShow])
-
-  return { content, isVisible }
-}
+import Button from '../components/ui/buttons/Button'
+import SegmentedControl from '../components/ui/buttons/SegmentedControl'
+import Input from '../components/ui/inputs/Input'
+import PasswordInput from '../components/ui/inputs/PasswordInput'
+import Toast from '../components/ui/popups/Toast'
+import TopNavigation from '../components/layout/Navbar/TopNavigation'
+import BackgroundBlobs from '../components/layout/BackgroundBlobs'
+import { useAuthForms, type AuthMode } from '../hooks/useAuthForms'
 
 function LoginPage() {
-  const [authMode, setAuthMode] = useState<AuthMode>('login')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [errorMessage, setErrorMessage] = useState('')
-  const [infoMessage, setInfoMessage] = useState('')
-  const [submitAttempted, setSubmitAttempted] = useState(false)
-  const [touched, setTouched] = useState({
-    email: false,
-    password: false,
-    confirmPassword: false,
-  })
-  const isRegisterMode = authMode === 'register'
-  const [showPasswords, setShowPasswords] = useState(false)
-  const [isDesktopViewport, setIsDesktopViewport] = useState(false)
-  const useSoftErrorTitle = errorMessage === 'Musisz wypełnić wszystkie wymagane pola.'
-
-  const isEmailEmpty = email.trim().length === 0
-  const isPasswordEmpty = password.length === 0
-  const isConfirmPasswordEmpty = confirmPassword.length === 0
-
-  const emailFormatError = !isEmailEmpty && !emailPattern.test(email.trim())
-  const passwordLengthError = isRegisterMode && !isPasswordEmpty && password.length < 8
-  const passwordUppercaseError =
-    isRegisterMode && !isPasswordEmpty && !passwordLengthError && !uppercasePattern.test(password)
-  const passwordSpecialCharacterError =
-    isRegisterMode &&
-    !isPasswordEmpty &&
-    !passwordLengthError &&
-    !specialCharacterPattern.test(password)
-  const confirmPasswordMismatchError =
-    isRegisterMode && !isConfirmPasswordEmpty && password !== confirmPassword
-
-  const emailRequiredError = submitAttempted && isEmailEmpty
-  const passwordRequiredError = submitAttempted && isPasswordEmpty
-  const confirmPasswordRequiredError = submitAttempted && isRegisterMode && isConfirmPasswordEmpty
-
-  const emailErrorMessage = emailFormatError ? 'Podaj poprawny adres email.' : ''
-  const passwordErrorMessage = passwordLengthError
-    ? 'Hasło musi mieć minimum 8 znaków.'
-    : passwordUppercaseError
-      ? 'Hasło musi zawierać co najmniej jedną wielką literę.'
-      : passwordSpecialCharacterError
-        ? 'Hasło musi zawierać co najmniej jeden znak specjalny.'
-        : ''
-  const confirmPasswordErrorMessage = confirmPasswordMismatchError ? 'Hasła muszą być takie same.' : ''
-
-  const showEmailErrorMessage = emailFormatError && (touched.email || submitAttempted || email.length > 0)
-  const showPasswordErrorMessage =
-    (passwordLengthError || passwordUppercaseError || passwordSpecialCharacterError) &&
-    (touched.password || submitAttempted || password.length > 0)
-  const showConfirmPasswordErrorMessage =
-    confirmPasswordMismatchError &&
-    (touched.confirmPassword || submitAttempted || confirmPassword.length > 0)
-
-  const emailFieldError = useAnimatedFieldError(emailErrorMessage, showEmailErrorMessage)
-  const passwordFieldError = useAnimatedFieldError(passwordErrorMessage, showPasswordErrorMessage)
-  const confirmPasswordFieldError = useAnimatedFieldError(
-    confirmPasswordErrorMessage,
-    showConfirmPasswordErrorMessage,
-  )
-
-  const emailHasError = emailRequiredError || emailFormatError
-  const passwordHasError =
-    passwordRequiredError || passwordLengthError || passwordUppercaseError || passwordSpecialCharacterError
-  const confirmPasswordHasError =
-    isRegisterMode && (confirmPasswordRequiredError || confirmPasswordMismatchError)
+  const {
+    authMode,
+    setAuthMode,
+    email,
+    setEmail,
+    password,
+    setPassword,
+    confirmPassword,
+    setConfirmPassword,
+    isSubmitting,
+    errorMessage,
+    setErrorMessage,
+    infoMessage,
+    setInfoMessage,
+    setTouched,
+    isRegisterMode,
+    showPasswords,
+    setShowPasswords,
+    isDesktopViewport,
+    useSoftErrorTitle,
+    emailHasError,
+    passwordHasError,
+    confirmPasswordHasError,
+    emailRequiredError,
+    passwordRequiredError,
+    confirmPasswordRequiredError,
+    emailFieldError,
+    passwordFieldError,
+    confirmPasswordFieldError,
+    handleAuthSubmit,
+    handleGoogleAuth,
+  } = useAuthForms()
 
   const emailInputErrorClassName = [
     emailHasError ? 'ring-red-500 focus:ring-red-500' : '',
     emailRequiredError ? 'placeholder:text-red-500/90' : '',
-  ]
-    .join(' ')
-    .trim()
+  ].join(' ').trim()
 
   const passwordInputErrorClassName = [
     passwordHasError ? 'ring-red-500 focus:ring-red-500' : '',
     passwordRequiredError ? 'placeholder:text-red-500/90' : '',
-  ]
-    .join(' ')
-    .trim()
+  ].join(' ').trim()
 
   const confirmPasswordInputErrorClassName = [
     confirmPasswordHasError ? 'ring-red-500 focus:ring-red-500' : '',
     confirmPasswordRequiredError ? 'placeholder:text-red-500/90' : '',
-  ]
-    .join(' ')
-    .trim()
-
-  const hasValidationErrors = Boolean(
-    emailRequiredError ||
-      emailFormatError ||
-      passwordRequiredError ||
-      passwordLengthError ||
-        passwordUppercaseError ||
-        passwordSpecialCharacterError ||
-      confirmPasswordRequiredError ||
-      confirmPasswordMismatchError,
-  )
-
-  useEffect(() => {
-    setShowPasswords(false)
-  }, [isRegisterMode])
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(min-width: 768px)')
-    const syncViewport = () => setIsDesktopViewport(mediaQuery.matches)
-
-    syncViewport()
-    mediaQuery.addEventListener('change', syncViewport)
-
-    return () => mediaQuery.removeEventListener('change', syncViewport)
-  }, [])
-
-  useEffect(() => {
-    setErrorMessage('')
-    setInfoMessage('')
-    setSubmitAttempted(false)
-    setTouched({
-      email: false,
-      password: false,
-      confirmPassword: false,
-    })
-  }, [isRegisterMode])
-
-  const handleAuthSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-
-    setErrorMessage('')
-    setInfoMessage('')
-
-    if (!isSupabaseConfigured) {
-      setErrorMessage('Brak konfiguracji Supabase. Uzupełnij VITE_SUPABASE_URL i VITE_SUPABASE_ANON_KEY.')
-      return
-    }
-
-    const normalizedEmail = email.trim().toLowerCase()
-
-    setSubmitAttempted(true)
-
-    setTouched({
-      email: true,
-      password: true,
-      confirmPassword: isRegisterMode,
-    })
-
-    if (hasValidationErrors) {
-      return
-    }
-
-    setIsSubmitting(true)
-
-    try {
-      if (isRegisterMode) {
-        const { data, error } = await supabase.auth.signUp({
-          email: normalizedEmail,
-          password,
-        })
-
-        if (error) {
-          setErrorMessage(mapSignUpErrorMessage(error.message))
-          clearPendingSignupSession()
-          return
-        }
-
-        const identitiesCount = data.user?.identities?.length ?? 0
-
-        if (identitiesCount === 0) {
-          setErrorMessage('Konto dla tego adresu już istnieje. Zaloguj się odpowiednią metodą (Email lub Google).')
-          clearPendingSignupSession()
-          return
-        }
-
-        const pendingExpiryAt = String(Date.now() + PENDING_SIGNUP_TTL_MS)
-
-        sessionStorage.setItem('pending_signup_email', normalizedEmail)
-        sessionStorage.setItem('pending_signup_started_at', pendingExpiryAt)
-
-        localStorage.setItem('pending_signup_email', normalizedEmail)
-        localStorage.setItem('pending_signup_started_at', pendingExpiryAt)
-        window.history.pushState({}, '', '/verify-email')
-        window.dispatchEvent(new PopStateEvent('popstate'))
-        return
-      }
-
-      const { error } = await supabase.auth.signInWithPassword({
-        email: normalizedEmail,
-        password,
-      })
-
-      if (error) {
-        setErrorMessage(mapSignInErrorMessage(error.message))
-      }
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
-
-  const handleGoogleAuth = async () => {
-    setErrorMessage('')
-    setInfoMessage('')
-
-    if (!isSupabaseConfigured) {
-      setErrorMessage('Brak konfiguracji Supabase. Uzupełnij zmienne środowiskowe.')
-      return
-    }
-
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: resolveOAuthRedirectUrl(),
-      },
-    })
-
-    if (error) {
-      setErrorMessage(error.message)
-    }
-  }
+  ].join(' ').trim()
 
   return (
     <BackgroundBlobs>
@@ -387,7 +117,7 @@ function LoginPage() {
             </div>
 
             <div className="mt-4 2xs:mt-6 2sm:mt-10 flex items-center gap-4">
-              <span className="h-px flex-1 bg-dark/10" />
+               <span className="h-px flex-1 bg-dark/10" />
               <span className="font-manrope text-[11px] font-semibold uppercase tracking-[0.6px] text-dark/50">
                 LUB EMAIL
               </span>
