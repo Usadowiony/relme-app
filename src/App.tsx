@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react'
 import DashboardLayout from './components/layout/DashboardLayout'
+import { useUserProfile } from './hooks/useUserProfile'
+import { QuizManagementPage } from './pages/admin/quiz/QuizManagementPage'
 
 function App() {
   const [currentPath, setCurrentPath] = useState(window.location.pathname)
+  const { role, isLoading } = useUserProfile()
 
   useEffect(() => {
     const handlePopState = () => setCurrentPath(window.location.pathname)
@@ -11,6 +14,8 @@ function App() {
   }, [])
 
   const renderContent = () => {
+    if (isLoading) return null
+
     switch (currentPath) {
       case '/':
       case '/dashboard':
@@ -21,12 +26,15 @@ function App() {
           </div>
         )
       case '/quiz':
-        return (
-          <div className="flex flex-col">
-            <h1 className="text-3xl font-manrope font-semibold tracking-tight">Zarządzanie Quizem</h1>
-            <p className="mt-2 text-dark/70">Tutaj będzie CMS do pytań i logiki algorytmu.</p>
-          </div>
-        )
+        if (role !== 'admin') {
+          return (
+            <div className="flex flex-col items-center justify-center h-[50vh] text-center">
+              <h1 className="text-3xl font-manrope font-semibold tracking-tight text-[#D15F5F]">Brak dostępu</h1>
+              <p className="mt-2 text-dark/70">Ta sekcja jest dostępna tylko dla administratorów.</p>
+            </div>
+          )
+        }
+        return <QuizManagementPage />
       case '/modules':
         return (
           <div className="flex flex-col">

@@ -55,10 +55,10 @@ export function Sidebar({ role, profile, currentPath = '/dashboard' }: SidebarPr
   }
 
   return (
-    <aside className="2xl:w-[280px] h-screen sticky top-0 bg-[#ffffff] shadow-[4px_0_24px_rgba(0,0,0,0.03)] flex flex-col py-18 px-6 lg:px-8 z-20">
+    <aside className="h-screen sticky top-0 bg-[#ffffff] shadow-[4px_0_24px_rgba(0,0,0,0.03)] flex flex-col py-18 px-6 lg:px-8 z-20">
 
       {/* Top Block: Logo and Profile */}
-      <div className="flex flex-col items-center mb-10 2xl:mb-12">
+      <div className="flex flex-col items-center mb-10 lg:mb-12">
         <img src={logoLong} alt="Relme" className="h-8 lg:h-10 w-auto object-contain mb-10" />
 
         <div className="flex flex-col items-center">
