@@ -51,9 +51,12 @@
   --breakpoint-md: 768px;
   --breakpoint-lg: 1024px;
   --breakpoint-xl: 1280px;
-  --breakpoint-2xl: 1536px;  /* duże laptopy */
-  --breakpoint-3xl: 1900px;  /* full HD */
-  --breakpoint-4xl: 2500px;  /* 1440p / 2K */
+  --breakpoint-2xl: 1536px;
+  /* duże laptopy */
+  --breakpoint-3xl: 1900px;
+  /* full HD */
+  --breakpoint-4xl: 2500px;
+  /* 1440p / 2K */
 }
 
 /* Globalne przypisania bazowe */
