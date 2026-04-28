@@ -1,6 +1,6 @@
-import React, { type Dispatch, type SetStateAction } from 'react'
+import { type Dispatch, type SetStateAction } from 'react'
 import { Plus, Trash2, ChevronDown, Save } from 'lucide-react'
-import type { Question, Tag, QuestionPayload, AnswerPayload, QuestionType } from '../../../../types/quiz'
+import type { Question, Tag, AnswerPayload, QuestionType } from '../../../../types/quiz'
 import { BaseModal } from './BaseModal'
 import { AsyncButton } from '../../../../components/ui/buttons/Button'
 import { useQuestionForm } from '../hooks/useQuestionForm'

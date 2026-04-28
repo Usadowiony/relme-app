@@ -1,15 +1,11 @@
 import { supabase } from './supabase'
 
 import type {
-  QuestionType,
   Tag,
   QuizPath,
-  Answer,
-  AnswerTag,
   Question,
   QuestionPayload,
   AnswerPayload,
-  LayoutPath,
   LayoutItem,
   DraftState,
   QuizVersion

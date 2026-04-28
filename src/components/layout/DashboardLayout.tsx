@@ -8,7 +8,7 @@ type DashboardLayoutProps = {
 }
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
-  const { profile, role, isLoading } = useUserProfile()
+  const { profile, role } = useUserProfile()
 
   const [currentPath, setCurrentPath] = useState(window.location.pathname)
 
