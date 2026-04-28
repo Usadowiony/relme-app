@@ -15,9 +15,6 @@ export function clearPendingSignupSession() {
   sessionStorage.removeItem('pending_signup_email')
   sessionStorage.removeItem('pending_signup_password')
   sessionStorage.removeItem('pending_signup_started_at')
-  localStorage.removeItem('pending_signup_email')
-  localStorage.removeItem('pending_signup_password')
-  localStorage.removeItem('pending_signup_started_at')
 }
 
 export function mapSignInErrorMessage(message: string) {
@@ -47,8 +44,6 @@ export async function signUpWithEmail(email: string, password: string) {
     const pendingExpiryAt = String(Date.now() + PENDING_SIGNUP_TTL_MS)
     sessionStorage.setItem('pending_signup_email', email)
     sessionStorage.setItem('pending_signup_started_at', pendingExpiryAt)
-    localStorage.setItem('pending_signup_email', email)
-    localStorage.setItem('pending_signup_started_at', pendingExpiryAt)
   }
   return response
 }

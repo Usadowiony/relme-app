@@ -14,8 +14,7 @@ import {
 } from 'lucide-react'
 import logoLong from '../../assets/icons/logo-long.svg'
 import { signOut } from '../../api/auth.api'
-import type { AppRole } from '../../hooks/useUserProfile'
-import type { Profile } from '../../api/profile.api'
+import type { AppRole, Profile } from '../../types/auth'
 
 type SidebarProps = {
   role: AppRole | null

@@ -1,26 +1,6 @@
 import { supabase } from './supabase'
 
-export type Profile = {
-  id: string
-  first_name: string | null
-  last_name: string | null
-  date_of_birth: string | null
-  phone_number: string | null
-  gender: string | null
-  avatar_url: string | null
-  quiz_completed: boolean
-  created_at: string
-  updated_at: string
-}
-
-export type ProfileGender = 'male' | 'female' | 'other'
-
-export type ProfileUpdates = Partial<
-  Pick<
-    Profile,
-    'first_name' | 'last_name' | 'date_of_birth' | 'phone_number' | 'gender' | 'avatar_url' | 'quiz_completed'
-  >
->
+import type { Profile, ProfileUpdates } from '../types/auth'
 
 const RETRY_DELAYS_MS = [500, 1000, 2000] as const
 const TOTAL_ATTEMPTS = RETRY_DELAYS_MS.length + 1
@@ -67,6 +47,22 @@ export async function getMyProfile() {
 }
 
 export async function updateMyProfile(updates: ProfileUpdates) {
+  if (updates.first_name !== undefined) {
+    if (!updates.first_name || updates.first_name.trim().length < 2) throw new Error('Imię musi mieć co najmniej 2 znaki.');
+    if (updates.first_name.length > 60) throw new Error('Imię nie może przekraczać 60 znaków.');
+  }
+  if (updates.last_name !== undefined) {
+    if (!updates.last_name || updates.last_name.trim().length < 2) throw new Error('Nazwisko musi mieć co najmniej 2 znaki.');
+    if (updates.last_name.length > 60) throw new Error('Nazwisko nie może przekraczać 60 znaków.');
+  }
+  if (updates.date_of_birth !== undefined && updates.date_of_birth !== null) {
+    const dob = new Date(updates.date_of_birth);
+    if (isNaN(dob.getTime())) throw new Error('Nieprawidłowy format daty urodzenia.');
+    const age = new Date().getFullYear() - dob.getFullYear();
+    const isAdult = age > 18 || (age === 18 && new Date() >= new Date(dob.getFullYear() + 18, dob.getMonth(), dob.getDate()));
+    if (!isAdult) throw new Error('Musisz mieć ukończone 18 lat.');
+  }
+
   const {
     data: { user },
     error: userError,

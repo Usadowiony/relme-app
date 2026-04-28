@@ -9,6 +9,8 @@ import OnboardingPage from './pages/OnboardingPage.tsx'
 import { AuthProvider, useAuth } from './auth/AuthProvider.tsx'
 import { ProtectedRoute } from './auth/ProtectedRoute.tsx'
 import { ProfileGate } from './auth/ProfileGate.tsx'
+import GlobalLoader from './components/ui/Loader/GlobalLoader.tsx'
+import { ErrorBoundary } from './components/ui/feedback/ErrorBoundary.tsx'
 
 function RootRoute() {
   const { session, loading } = useAuth()
@@ -32,41 +34,48 @@ function RootRoute() {
     }
   }, [loading, pathname, session])
 
-  if (pathname === '/login') {
-    return <LoginPage />
-  }
+  let content = null
 
-  if (pathname === '/verify-email') {
-    return <EmailVerificationPage />
-  }
-
-  if (pathname === '/design') {
-    return <DesignSandbox />
-  }
-
-  if (pathname === '/onboarding') {
-    return (
-      <ProtectedRoute>
-        <ProfileGate>
-          <OnboardingPage />
-        </ProfileGate>
-      </ProtectedRoute>
-    )
+  if (!loading) {
+    if (pathname === '/login') {
+      content = <LoginPage />
+    } else if (pathname === '/verify-email') {
+      content = <EmailVerificationPage />
+    } else if (pathname === '/design') {
+      content = <DesignSandbox />
+    } else if (pathname === '/onboarding') {
+      content = (
+        <ProtectedRoute>
+          <ProfileGate>
+            <OnboardingPage />
+          </ProfileGate>
+        </ProtectedRoute>
+      )
+    } else {
+      content = (
+        <ProtectedRoute>
+          <ProfileGate>
+            <App />
+          </ProfileGate>
+        </ProtectedRoute>
+      )
+    }
   }
 
   return (
-    <ProtectedRoute>
-      <ProfileGate>
-        <App />
-      </ProfileGate>
-    </ProtectedRoute>
+    <>
+      <GlobalLoader isLoading={loading} />
+      {content}
+    </>
   )
 }
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthProvider>
-      <RootRoute />
+      <ErrorBoundary>
+        <RootRoute />
+      </ErrorBoundary>
     </AuthProvider>
   </StrictMode>,
 )

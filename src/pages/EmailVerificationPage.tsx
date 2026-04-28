@@ -307,7 +307,7 @@ function EmailVerificationPage() {
             </div>
 
             <div className="mt-10 xs:max-w-[400px] mx-auto">
-              <Button fullWidth type="submit" disabled={isSubmitting || isResending}>
+              <Button fullWidth type="submit" isLoading={isSubmitting || isResending}>
                 Aktywuj konto
               </Button>
             </div>

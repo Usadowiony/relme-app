@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { supabase } from '../api/supabase'
-import { getMyProfile, isProfileOnboardingComplete, type Profile } from '../api/profile.api'
+import { getMyProfile, isProfileOnboardingComplete } from '../api/profile.api'
+import type { Profile } from '../types/auth'
 import { useAuth } from './AuthProvider'
 import ProfileErrorView from './ProfileErrorView'
+import GlobalLoader from '../components/ui/Loader/GlobalLoader'
 
 type ProfileGateProps = {
   children: ReactNode
@@ -16,7 +18,6 @@ export function ProfileGate({ children }: ProfileGateProps) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [errorMessage, setErrorMessage] = useState('')
   const [retryKey, setRetryKey] = useState(0)
-  const [showPreparingMessage, setShowPreparingMessage] = useState(false)
 
   const loadProfile = useCallback(async () => {
     setStatus('loading')
@@ -63,19 +64,6 @@ export function ProfileGate({ children }: ProfileGateProps) {
     }
   }, [profile, status])
 
-  useEffect(() => {
-    if (status !== 'loading') {
-      setShowPreparingMessage(false)
-      return
-    }
-
-    const timer = window.setTimeout(() => {
-      setShowPreparingMessage(true)
-    }, 2000)
-
-    return () => window.clearTimeout(timer)
-  }, [status])
-
   const handleRetry = () => {
     setRetryKey((previous) => previous + 1)
   }
@@ -99,23 +87,10 @@ export function ProfileGate({ children }: ProfileGateProps) {
   }
 
   return (
-    <div className="relative">
-      {children}
-
-      {status === 'loading' ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-6 backdrop-blur-[2px]">
-          <div className="w-full max-w-[360px] rounded-3xl bg-white p-8 text-center shadow-large">
-            <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-primary/25 border-t-primary" />
-
-            {showPreparingMessage ? (
-              <p className="mt-5 font-manrope text-sm font-semibold text-dark/85">
-                Przygotowujemy Twoją przestrzeń...
-              </p>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-    </div>
+    <>
+      {status === 'ready' && children}
+      <GlobalLoader isLoading={status === 'loading' || status === 'idle'} />
+    </>
   )
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { isSupabaseConfigured, supabase } from '../api/supabase'
-import { getMyProfile, updateMyProfile, type Profile, type ProfileGender } from '../api/profile.api'
+import { getMyProfile, updateMyProfile } from '../api/profile.api'
+import type { Profile, ProfileGender } from '../types/auth'
 
 const NAME_MIN_LENGTH = 2
 const NAME_MAX_LENGTH = 60

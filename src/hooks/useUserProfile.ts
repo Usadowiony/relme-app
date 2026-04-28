@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../api/supabase'
-import { getMyProfile, type Profile } from '../api/profile.api'
-
-export type AppRole = 'user' | 'mentor' | 'admin'
+import { getMyProfile } from '../api/profile.api'
+import type { Profile, AppRole } from '../types/auth'
 
 export function useUserProfile() {
   const [profile, setProfile] = useState<Profile | null>(null)

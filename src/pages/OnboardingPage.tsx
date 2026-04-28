@@ -5,8 +5,9 @@ import SegmentedControl from '../components/ui/buttons/SegmentedControl'
 import Input from '../components/ui/inputs/Input'
 import TopNavigation from '../components/layout/Navbar/TopNavigation'
 import BackgroundBlobs from '../components/layout/BackgroundBlobs'
+import Toast from '../components/ui/popups/Toast'
 import { useOnboarding } from '../hooks/useOnboarding'
-import { type ProfileGender } from '../api/profile.api'
+import type { ProfileGender } from '../types/auth'
 
 type GenderOption = {
   value: ProfileGender
@@ -68,6 +69,14 @@ function OnboardingPage() {
 
   return (
     <BackgroundBlobs>
+      <Toast
+        open={Boolean(formErrorMessage)}
+        type="error"
+        title="Mamy problem!"
+        message={formErrorMessage || ''}
+        position="top"
+        durationMs={5000}
+      />
       <main className="flex min-h-svh flex-col bg-neutral px-6 py-8 text-dark sm:bg-transparent lg:max-w-5xl 2xl:max-w-[1440px] mx-auto w-full">
         <TopNavigation
           className="hidden md:block"
@@ -180,7 +189,7 @@ function OnboardingPage() {
                     </p>
                   ) : null}
 
-                  <Button fullWidth type="submit" disabled={!canSubmit}>
+                  <Button fullWidth type="submit" isLoading={isSubmitting} disabled={!canSubmit}>
                     <span className="inline-flex items-center gap-2">
                       Rozpocznij Quiz
                       <ChevronRight className="size-4" />
@@ -298,7 +307,7 @@ function OnboardingPage() {
                         </button>
                       </div>
                       <div className="mx-auto w-full">
-                        <Button fullWidth type="submit" disabled={!canSubmit}>
+                        <Button fullWidth type="submit" isLoading={isSubmitting} disabled={!canSubmit}>
                           <span className="inline-flex items-center gap-2">
                             Rozpocznij Quiz
                             <ChevronRight className="size-4" />

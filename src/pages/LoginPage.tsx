@@ -109,7 +109,7 @@ function LoginPage() {
                 fullWidth
                 variant="social"
                 onClick={handleGoogleAuth}
-                disabled={isSubmitting}
+                isLoading={isSubmitting}
                 leftIcon={<img src={googleLogo} alt="" aria-hidden="true" className="size-[18px]" />}
               >
                 Kontynuuj przez konto Google
@@ -219,7 +219,7 @@ function LoginPage() {
               </div>
 
               <div className="mt-6 2xs:mt-8 2sm:mt-14 w-full">
-                <Button fullWidth type="submit" disabled={isSubmitting}>
+                <Button fullWidth type="submit" isLoading={isSubmitting}>
                   {isRegisterMode ? 'Zarejestruj się' : 'Zaloguj się'}
                 </Button>
               </div>

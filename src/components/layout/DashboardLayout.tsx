@@ -18,13 +18,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     return () => window.removeEventListener('popstate', handlePopState)
   }, [])
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-neutral flex items-center justify-center">
-        <div className="animate-spin size-8 border-4 border-primary border-t-transparent rounded-full" />
-      </div>
-    )
-  }
+  // Usuwamy stary blok if (isLoading) ze spinnerem, który migał pod splashem.
+  // Sidebar i tak obsłuży brak profilu podczas pierwszej sekundy ładowania.
 
   return (
     <div className="min-h-screen flex font-manrope">

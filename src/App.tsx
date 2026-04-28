@@ -14,6 +14,8 @@ function App() {
   }, [])
 
   const renderContent = () => {
+    // Czekamy na rolę użytkownika. Dzięki temu, że DashboardLayout renderuje już swój szkielet (sidebar/tło), 
+    // zwrócenie tutaj null nie powoduje "białego mignięcia", a jedynie ukrywa treść do czasu weryfikacji uprawnień.
     if (isLoading) return null
 
     switch (currentPath) {
