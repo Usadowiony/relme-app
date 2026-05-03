@@ -12,8 +12,8 @@ const ScaleConfig = ({
   error,
   setError
 }: {
-  scaleLabels: { start: string, mid: string, end: string }
-  setScaleLabels: Dispatch<SetStateAction<{ start: string, mid: string, end: string }>>
+  scaleLabels: { start: string, end: string }
+  setScaleLabels: Dispatch<SetStateAction<{ start: string, end: string }>>
   error: string
   setError: (e: string) => void
 }) => (
@@ -32,20 +32,7 @@ const ScaleConfig = ({
         className="w-full px-3 py-2 rounded-lg border border-dark/20 text-[13px] font-medium focus:border-primary/50 focus:outline-none"
       />
     </div>
-    <div className="flex-1">
-      <label className="block text-[10px] font-bold tracking-widest text-dark/50 mb-2">ETYKIETA ŚRODKA (5)</label>
-      <input
-        type="text"
-        maxLength={24}
-        value={scaleLabels.mid}
-        onChange={e => {
-          setScaleLabels(p => ({ ...p, mid: e.target.value }))
-          if (error.includes('etykiety')) setError('')
-        }}
-        placeholder="np. Trudno powiedzieć"
-        className="w-full px-3 py-2 rounded-lg border border-dark/20 text-[13px] font-medium focus:border-primary/50 focus:outline-none"
-      />
-    </div>
+
     <div className="flex-1">
       <label className="block text-[10px] font-bold tracking-widest text-dark/50 mb-2">ETYKIETA KOŃCA (10)</label>
       <input

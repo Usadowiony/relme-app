@@ -8,7 +8,8 @@ import type {
   AnswerPayload,
   LayoutItem,
   DraftState,
-  QuizVersion
+  QuizVersion,
+  QuizSubmissionPayload
 } from '../types/quiz'
 import { validateTagPayload } from '../utils/validation'
 import { countLayoutQuestions } from '../utils/quizTree'
@@ -126,10 +127,10 @@ export async function saveQuestionWithAnswers(
     }
     try {
       const first = JSON.parse(answers[0].content)
-      if (!first.start?.trim() || !first.mid?.trim() || !first.end?.trim()) {
-        throw new Error('Etykiety skali (początek, środek, koniec) nie mogą być puste.')
+      if (!first.start?.trim() || !first.end?.trim()) {
+        throw new Error('Etykiety skali (początek, koniec) nie mogą być puste.')
       }
-      if (first.start.length > 24 || first.mid.length > 24 || first.end.length > 24) {
+      if (first.start.length > 24 || first.end.length > 24) {
         throw new Error('Etykiety skali nie mogą przekraczać 24 znaków.')
       }
     } catch (e) {
@@ -281,5 +282,78 @@ export async function publishQuizVersion(id: string): Promise<void> {
   } catch (error: any) {
     console.error('Error publishing quiz version:', error)
     throw new Error(error.message || 'Nie udało się opublikować wersji quizu. Spróbuj ponownie.')
+  }
+}
+
+// =============================================
+// QUIZ PLAYER (FRONTEND API)
+// =============================================
+
+export async function getLiveQuiz(): Promise<{ version: QuizVersion, questions: Question[] }> {
+  // 1. Pobierz aktywną wersję
+  const { data: versionData, error: versionError } = await supabase
+    .from('quiz_versions')
+    .select('*')
+    .eq('status', 'live')
+    .single()
+
+  if (versionError || !versionData) {
+    throw new Error('Brak opublikowanej wersji quizu.')
+  }
+
+  const version = versionData as QuizVersion
+
+  // Pobierz wszystkie ID pytań użytych w układzie
+  const questionIds: string[] = []
+  function traverse(items: LayoutItem[]) {
+    for (const item of items) {
+      if (!questionIds.includes(item.question_id)) {
+        questionIds.push(item.question_id)
+      }
+      for (const path of item.paths) {
+        traverse(path.children)
+      }
+    }
+  }
+  traverse(version.layout_data)
+
+  if (questionIds.length === 0) {
+    return { version, questions: [] }
+  }
+
+  // 2. Pobierz powiązane pytania (z JOIN na odpowiedzi, tagi, obrazki)
+  const { data: questionsData, error: questionsError } = await supabase
+    .from('questions')
+    .select(`
+      *,
+      media_assets ( file_url ),
+      answers!answers_question_id_fkey (
+        *,
+        answer_tags (
+          *,
+          tags (*)
+        )
+      )
+    `)
+    .in('id', questionIds)
+
+  if (questionsError) {
+    throw new Error('Błąd podczas pobierania pytań z bazy.')
+  }
+
+  return { version, questions: (questionsData || []) as Question[] }
+}
+
+export async function submitQuizResult(payload: QuizSubmissionPayload): Promise<void> {
+  const { error } = await supabase.rpc('submit_quiz_result_rpc', {
+    payload
+  })
+
+  if (error) {
+    console.error('Błąd zapisu wyniku:', error)
+    if (error.message.includes('Użytkownik już ukończył quiz')) {
+      throw new Error('Już wcześniej ukończyłeś ten quiz.');
+    }
+    throw new Error('Nie udało się zapisać wyniku quizu. Spróbuj ponownie.')
   }
 }

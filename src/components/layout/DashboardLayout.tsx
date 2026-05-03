@@ -1,4 +1,5 @@
-import { useState, useEffect, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
+import { useLocation } from 'react-router-dom'
 import BackgroundGradient from './BackgroundGradient'
 import Sidebar from './Sidebar'
 import { useUserProfile } from '../../hooks/useUserProfile'
@@ -9,21 +10,14 @@ type DashboardLayoutProps = {
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { profile, role } = useUserProfile()
-
-  const [currentPath, setCurrentPath] = useState(window.location.pathname)
-
-  useEffect(() => {
-    const handlePopState = () => setCurrentPath(window.location.pathname)
-    window.addEventListener('popstate', handlePopState)
-    return () => window.removeEventListener('popstate', handlePopState)
-  }, [])
+  const location = useLocation()
 
   // Usuwamy stary blok if (isLoading) ze spinnerem, który migał pod splashem.
   // Sidebar i tak obsłuży brak profilu podczas pierwszej sekundy ładowania.
 
   return (
     <div className="min-h-screen flex font-manrope">
-      <Sidebar role={role} profile={profile} currentPath={currentPath} />
+      <Sidebar role={role} profile={profile} currentPath={location.pathname} />
 
       <main className="flex-1 relative overflow-hidden">
         <BackgroundGradient />

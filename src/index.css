@@ -90,7 +90,7 @@
 /* Globalne przypisania bazowe */
 @layer base {
   body {
-    @apply bg-neutral text-dark antialiased;
+    @apply bg-white text-dark antialiased;
     font-family: var(--font-inter);
     font-size: var(--text-base);
   }

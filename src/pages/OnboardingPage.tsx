@@ -114,6 +114,7 @@ function OnboardingPage() {
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                   <div>
                     <Input
+                      id="desktop-firstName"
                       label="Imię"
                       name="firstName"
                       placeholder="Twoje imię"
@@ -132,6 +133,7 @@ function OnboardingPage() {
 
                   <div>
                     <Input
+                      id="desktop-lastName"
                       label="Nazwisko"
                       name="lastName"
                       placeholder="Kowalski"
@@ -152,6 +154,7 @@ function OnboardingPage() {
                 <div className="mt-6 md:mt-10 grid gap-4 ">
                   <div>
                     <Input
+                      id="desktop-dateOfBirth"
                       label="Data urodzenia"
                       name="dateOfBirth"
                       type="date"
@@ -204,6 +207,7 @@ function OnboardingPage() {
                     <div className="w-full grid grid-cols-1 gap-8">
                       <div>
                         <Input
+                          id="mobile-firstName"
                           label="Imię"
                           name="firstName"
                           placeholder="Twoje imię"
@@ -222,6 +226,7 @@ function OnboardingPage() {
 
                       <div>
                         <Input
+                          id="mobile-lastName"
                           label="Nazwisko"
                           name="lastName"
                           placeholder="Twoje nazwisko"
@@ -242,6 +247,7 @@ function OnboardingPage() {
                     <div className="w-full space-y-6">
                       <div>
                         <Input
+                          id="mobile-dateOfBirth"
                           label="Data urodzenia"
                           name="dateOfBirth"
                           type="date"

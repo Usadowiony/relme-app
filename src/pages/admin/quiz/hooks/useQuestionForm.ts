@@ -18,7 +18,7 @@ export function useQuestionForm({ isOpen, initialData, availableTags, onSave }: 
   const [isSaving, setIsSaving] = useState(false)
 
   // Scale specific state
-  const [scaleLabels, setScaleLabels] = useState({ start: '', mid: '', end: '' })
+  const [scaleLabels, setScaleLabels] = useState({ start: '', end: '' })
 
   // Tag selection inline list state - allows multiple to be open
   const [openTagDropdownIdxs, setOpenTagDropdownIdxs] = useState<number[]>([])
@@ -49,7 +49,6 @@ export function useQuestionForm({ isOpen, initialData, availableTags, onSave }: 
               if (parsed.start !== undefined) {
                 setScaleLabels({
                   start: parsed.start || '',
-                  mid: parsed.mid || '',
                   end: parsed.end || ''
                 })
                 labelsFound = true
@@ -58,7 +57,7 @@ export function useQuestionForm({ isOpen, initialData, availableTags, onSave }: 
             } catch { /* skip */ }
           }
           if (!labelsFound) {
-            setScaleLabels({ start: '', mid: '', end: '' })
+            setScaleLabels({ start: '', end: '' })
           }
 
           const mappedAnswers = sortedAnswers.map((a, idx) => {
@@ -87,7 +86,7 @@ export function useQuestionForm({ isOpen, initialData, availableTags, onSave }: 
         } else {
           setAnswers([{ content: '', tags: [] }])
         }
-        setScaleLabels({ start: '', mid: '', end: '' })
+        setScaleLabels({ start: '', end: '' })
       }
 
       setError('')
@@ -199,8 +198,8 @@ export function useQuestionForm({ isOpen, initialData, availableTags, onSave }: 
     }
 
     if (questionType === 'scale') {
-      if (!scaleLabels.start.trim() || !scaleLabels.mid.trim() || !scaleLabels.end.trim()) {
-        setError('Wszystkie etykiety skali (początek, środek, koniec) muszą być uzupełnione.')
+      if (!scaleLabels.start.trim() || !scaleLabels.end.trim()) {
+        setError('Wszystkie etykiety skali (początek, koniec) muszą być uzupełnione.')
         isValid = false
       }
     } else {
@@ -240,7 +239,7 @@ export function useQuestionForm({ isOpen, initialData, availableTags, onSave }: 
     const answersToSave = answers.map((ans, i) => {
       if (questionType === 'scale') {
         if (i === 0) {
-          return { ...ans, content: JSON.stringify({ value: 1, start: scaleLabels.start, mid: scaleLabels.mid, end: scaleLabels.end }) }
+          return { ...ans, content: JSON.stringify({ value: 1, start: scaleLabels.start, end: scaleLabels.end }) }
         } else {
           return { ...ans, content: JSON.stringify({ value: i + 1 }) }
         }

@@ -1,5 +1,6 @@
-import { StrictMode, useEffect, useState } from 'react'
+import { StrictMode, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
+import { BrowserRouter, useLocation, useNavigate } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
 import DesignSandbox from './pages/DesignSandbox.tsx'
@@ -14,14 +15,9 @@ import { ErrorBoundary } from './components/ui/feedback/ErrorBoundary.tsx'
 
 function RootRoute() {
   const { session, loading } = useAuth()
-  const [pathname, setPathname] = useState(window.location.pathname)
-
-  useEffect(() => {
-    const handlePopState = () => setPathname(window.location.pathname)
-
-    window.addEventListener('popstate', handlePopState)
-    return () => window.removeEventListener('popstate', handlePopState)
-  }, [])
+  const location = useLocation()
+  const navigate = useNavigate()
+  const pathname = location.pathname
 
   useEffect(() => {
     if (loading) {
@@ -29,10 +25,9 @@ function RootRoute() {
     }
 
     if (session && (pathname === '/login' || pathname === '/verify-email')) {
-      window.history.replaceState({}, '', '/')
-      setPathname('/')
+      navigate('/', { replace: true })
     }
-  }, [loading, pathname, session])
+  }, [loading, navigate, pathname, session])
 
   let content = null
 
@@ -72,10 +67,12 @@ function RootRoute() {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <AuthProvider>
-      <ErrorBoundary>
-        <RootRoute />
-      </ErrorBoundary>
-    </AuthProvider>
+    <BrowserRouter>
+      <AuthProvider>
+        <ErrorBoundary>
+          <RootRoute />
+        </ErrorBoundary>
+      </AuthProvider>
+    </BrowserRouter>
   </StrictMode>,
 )

@@ -15,6 +15,7 @@ import {
 import logoLong from '../../assets/icons/logo-long.svg'
 import { signOut } from '../../api/auth.api'
 import type { AppRole, Profile } from '../../types/auth'
+import { useNavigate } from 'react-router-dom'
 
 type SidebarProps = {
   role: AppRole | null
@@ -31,7 +32,7 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Strona główna', icon: Home, path: '/dashboard', roles: ['user', 'mentor', 'admin'] },
-  { label: 'Quiz', icon: List, path: '/quiz', roles: ['admin'] },
+  { label: 'Quiz', icon: List, path: '/admin/quiz', roles: ['admin'] },
   { label: 'Moduły', icon: LayoutGrid, path: '/modules', roles: ['admin'] },
   { label: 'Kalendarz', icon: Calendar, path: '/calendar', roles: ['admin'] },
   { label: 'Mentorzy', icon: Headset, path: '/mentors', roles: ['admin'] },
@@ -40,6 +41,7 @@ const NAV_ITEMS: NavItem[] = [
 ]
 
 export function Sidebar({ role, profile, currentPath = '/dashboard' }: SidebarProps) {
+  const navigate = useNavigate()
   const visibleNavItems = NAV_ITEMS.filter(item => role && item.roles.includes(role))
 
   const handleLogout = async () => {
@@ -96,8 +98,7 @@ export function Sidebar({ role, profile, currentPath = '/dashboard' }: SidebarPr
               <button
                 key={item.label}
                 onClick={() => {
-                  window.history.pushState({}, '', item.path)
-                  window.dispatchEvent(new PopStateEvent('popstate'))
+                  navigate(item.path)
                 }}
                 className={`group cursor-pointer w-full flex items-center gap-3 lg:gap-4 px-[18px] lg:px-[20px] py-[14px] lg:py-[16px] rounded-[12px] lg:rounded-[14px] transition-all duration-200 font-manrope font-medium text-[14px] lg:text-[16px] leading-[24px] border ${isActive
                   ? 'bg-neutral text-dark border-dark'

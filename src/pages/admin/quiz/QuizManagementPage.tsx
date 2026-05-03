@@ -117,7 +117,7 @@ export function QuizManagementPage() {
         durationMs={5000}
         onClose={() => setToastMessage('')}
       />
-      <div className="w-full max-w-[1200px] mx-auto pt-12 px-4 md:px-8 xl:px-16">
+      <div className="w-full max-w-[1400px] mx-auto pt-12 px-4 md:px-8">
         {/* Header */}
         <div className="mb-6 flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div>
@@ -132,7 +132,7 @@ export function QuizManagementPage() {
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 xl:gap-6">
             {activeTab === 'questions' && (
               <button
                 onClick={() => handleOpenQuestionModal()}
@@ -162,7 +162,10 @@ export function QuizManagementPage() {
                   <History className="size-4 xl:size-4.5" />
                   Kontrola wersji
                 </button>
-                <button className="bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-full font-medium text-[14px] xl:text-[15px] transition-colors flex items-center gap-2 shadow-sm cursor-pointer">
+                <button 
+                  onClick={() => window.open('/quiz', '_blank')}
+                  className="bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-full font-medium text-[14px] xl:text-[15px] transition-colors flex items-center gap-2 shadow-sm cursor-pointer"
+                >
                   <PlayCircle className="size-4 xl:size-4.5" />
                   Rozwiąż Quiz
                 </button>

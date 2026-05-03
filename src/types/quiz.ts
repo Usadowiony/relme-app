@@ -85,3 +85,53 @@ export type QuizVersion = {
   published_at: string | null
   created_by: string | null
 }
+
+// Snapshot Pattern for Submissions
+export type SnapshotTag = {
+  tag_slug: string
+  points: number
+}
+
+export type SnapshotAnswer = {
+  answer_id: string
+  content: string
+  tags: SnapshotTag[]
+}
+
+export type SnapshotData = {
+  question_content: string
+  question_type: QuestionType
+  answers: SnapshotAnswer[]
+}
+
+export type QuizSubmissionAnswer = {
+  question_id: string
+  selected_answer_ids: string[]
+  snapshot: SnapshotData
+}
+
+export type QuizSubmissionPayload = {
+  version_id: string
+  answers: QuizSubmissionAnswer[]
+}
+
+/*
+Proposed SQL Schema for Submissions:
+
+CREATE TABLE quiz_submissions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  version_id UUID REFERENCES quiz_versions(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  completed_at TIMESTAMPTZ
+);
+
+CREATE TABLE submission_answers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  submission_id UUID REFERENCES quiz_submissions(id) ON DELETE CASCADE,
+  question_id UUID REFERENCES questions(id) ON DELETE SET NULL,
+  selected_answer_ids UUID[] NOT NULL,
+  snapshot JSONB NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+*/

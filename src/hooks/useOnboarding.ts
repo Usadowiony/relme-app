@@ -204,7 +204,8 @@ export function useOnboarding() {
       }
 
       await updateMyProfile(updates)
-
+      
+      window.dispatchEvent(new Event('profileUpdated'))
       window.history.replaceState({}, '', '/')
       window.dispatchEvent(new PopStateEvent('popstate'))
     } catch (error) {

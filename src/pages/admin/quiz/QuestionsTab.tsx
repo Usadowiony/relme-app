@@ -74,7 +74,6 @@ export function QuestionsTab({ questions, onEdit, onDelete }: { questions: Quest
               {q.question_type === 'scale' ? (() => {
                 // Parse labels from the first answer's JSON content
                 let startLabel = '1'
-                let midLabel = '5'
                 let endLabel = '10'
                 const firstAns = q.answers?.find((a) => {
                   try {
@@ -87,7 +86,6 @@ export function QuestionsTab({ questions, onEdit, onDelete }: { questions: Quest
                   try {
                     const parsed = JSON.parse(firstAns.content)
                     if (parsed.start) startLabel = parsed.start
-                    if (parsed.mid) midLabel = parsed.mid
                     if (parsed.end) endLabel = parsed.end
                   } catch { /* fallback to defaults */ }
                 }
@@ -102,7 +100,6 @@ export function QuestionsTab({ questions, onEdit, onDelete }: { questions: Quest
                     </div>
                     <div className="relative flex justify-between mt-4 text-[9px] font-bold tracking-widest text-dark/50 uppercase">
                       <span>{startLabel}</span>
-                      <span className="absolute left-1/2 -translate-x-1/2">{midLabel}</span>
                       <span>{endLabel}</span>
                     </div>
                   </div>

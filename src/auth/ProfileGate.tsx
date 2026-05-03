@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { Navigate, useLocation } from 'react-router-dom'
 import { supabase } from '../api/supabase'
 import { getMyProfile, isProfileOnboardingComplete } from '../api/profile.api'
-import type { Profile } from '../types/auth'
+import type { AppRole, Profile } from '../types/auth'
 import { useAuth } from './AuthProvider'
 import ProfileErrorView from './ProfileErrorView'
 import GlobalLoader from '../components/ui/Loader/GlobalLoader'
@@ -18,6 +19,8 @@ export function ProfileGate({ children }: ProfileGateProps) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [errorMessage, setErrorMessage] = useState('')
   const [retryKey, setRetryKey] = useState(0)
+  const [role, setRole] = useState<AppRole | null>(null)
+  const location = useLocation()
 
   const loadProfile = useCallback(async () => {
     setStatus('loading')
@@ -25,6 +28,11 @@ export function ProfileGate({ children }: ProfileGateProps) {
 
     try {
       const fetchedProfile = await getMyProfile()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: roleData } = await supabase.from('user_roles').select('role').eq('user_id', user.id).single()
+        setRole((roleData?.role as AppRole | undefined) ?? 'user')
+      }
       setProfile(fetchedProfile)
       setStatus('ready')
     } catch (error) {
@@ -42,27 +50,13 @@ export function ProfileGate({ children }: ProfileGateProps) {
     }
 
     void loadProfile()
+
+    const handleProfileUpdate = () => {
+      void loadProfile()
+    }
+    window.addEventListener('profileUpdated', handleProfileUpdate)
+    return () => window.removeEventListener('profileUpdated', handleProfileUpdate)
   }, [loading, loadProfile, retryKey, session])
-
-  useEffect(() => {
-    if (status !== 'ready' || !profile) {
-      return
-    }
-
-    const pathname = window.location.pathname
-    const isOnboardingComplete = isProfileOnboardingComplete(profile)
-
-    if (!isOnboardingComplete && pathname !== '/onboarding') {
-      window.history.replaceState({}, '', '/onboarding')
-      window.dispatchEvent(new PopStateEvent('popstate'))
-      return
-    }
-
-    if (isOnboardingComplete && pathname === '/onboarding') {
-      window.history.replaceState({}, '', '/')
-      window.dispatchEvent(new PopStateEvent('popstate'))
-    }
-  }, [profile, status])
 
   const handleRetry = () => {
     setRetryKey((previous) => previous + 1)
@@ -86,12 +80,33 @@ export function ProfileGate({ children }: ProfileGateProps) {
     )
   }
 
-  return (
-    <>
-      {status === 'ready' && children}
-      <GlobalLoader isLoading={status === 'loading' || status === 'idle'} />
-    </>
-  )
+  if (status === 'loading' || status === 'idle') {
+    return <GlobalLoader isLoading />
+  }
+
+  if (!profile) {
+    return <GlobalLoader isLoading />
+  }
+
+  const isOnboardingComplete = isProfileOnboardingComplete(profile)
+
+  if (!isOnboardingComplete && location.pathname !== '/onboarding') {
+    return <Navigate to="/onboarding" replace />
+  }
+
+  if (isOnboardingComplete && location.pathname === '/onboarding') {
+    return <Navigate to={role === 'user' && !profile.quiz_completed ? '/quiz' : '/'} replace />
+  }
+
+  if (isOnboardingComplete && role === 'user' && !profile.quiz_completed && location.pathname !== '/quiz') {
+    return <Navigate to="/quiz" replace />
+  }
+
+  if (location.pathname.startsWith('/admin') && role !== 'admin') {
+    return <Navigate to="/" replace />
+  }
+
+  return <>{children}</>
 }
 
 export default ProfileGate
