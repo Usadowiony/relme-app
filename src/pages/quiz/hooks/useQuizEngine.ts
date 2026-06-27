@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { Question, LayoutItem, QuizVersion, QuizSubmissionPayload, SnapshotData } from '../../../types/quiz';
 
 type AnswersState = Record<string, string[]>;
@@ -31,19 +31,42 @@ export function useQuizEngine(userId: string, version: QuizVersion | null, quest
     }
   }, [version, storageKey]);
 
-  // Save to LocalStorage
+  // Save to LocalStorage (debounced — RAM is instant, disk write delayed 300ms)
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingStateRef = useRef<{ history: string[]; answers: AnswersState; currentQuestionId: string | null } | null>(null);
+
+  const flushToLocalStorage = useCallback(() => {
+    if (!storageKey || !pendingStateRef.current) return;
+    localStorage.setItem(storageKey, JSON.stringify(pendingStateRef.current));
+    pendingStateRef.current = null;
+  }, [storageKey]);
+
+  // Flush pending writes on unmount / page unload
+  useEffect(() => {
+    const handleBeforeUnload = () => flushToLocalStorage();
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      flushToLocalStorage();
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    };
+  }, [flushToLocalStorage]);
+
   const saveState = useCallback((newHistory: string[], newAnswers: AnswersState, newCurrentId: string | null) => {
     if (!version || !storageKey) return;
     setHistory(newHistory);
     setAnswers(newAnswers);
     setCurrentQuestionId(newCurrentId);
-    
-    localStorage.setItem(storageKey, JSON.stringify({
+
+    // Buffer in RAM, schedule disk write
+    pendingStateRef.current = {
       history: newHistory,
       answers: newAnswers,
       currentQuestionId: newCurrentId
-    }));
-  }, [version, storageKey]);
+    };
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = setTimeout(flushToLocalStorage, 300);
+  }, [version, storageKey, flushToLocalStorage]);
 
   const clearSavedProgress = useCallback(() => {
     if (storageKey) {
@@ -51,18 +74,17 @@ export function useQuizEngine(userId: string, version: QuizVersion | null, quest
     }
   }, [storageKey]);
 
-  // Compute deterministic sequence of questions based on current answers
-  const getSequence = useCallback((currentAnswers: AnswersState) => {
+  // Pure helper — traverses the tree for a given answers snapshot
+  const computeSequence = useCallback((currentAnswers: AnswersState): string[] => {
     if (!version) return [];
     const seq: string[] = [];
-    
+
     function traverse(items: LayoutItem[]) {
       for (const item of items) {
         seq.push(item.question_id);
         const itemAnswers = currentAnswers[item.question_id];
-        
+
         if (itemAnswers && itemAnswers.length > 0) {
-          // If we answered this question, check if it leads to a specific path
           const takenPath = item.paths.find(p => itemAnswers.includes(p.answer_id));
           if (takenPath && takenPath.children.length > 0) {
             traverse(takenPath.children);
@@ -70,10 +92,13 @@ export function useQuizEngine(userId: string, version: QuizVersion | null, quest
         }
       }
     }
-    
+
     traverse(version.layout_data);
     return seq;
   }, [version]);
+
+  // Memoized sequence — recalculated only when `answers` or `version` change
+  const sequence = useMemo(() => computeSequence(answers), [computeSequence, answers]);
 
   // Zapisanie odpowiedzi, bez przechodzenia dalej
   const handleAnswer = useCallback((questionId: string, selectedAnswerIds: string[]) => {
@@ -92,18 +117,20 @@ export function useQuizEngine(userId: string, version: QuizVersion | null, quest
     saveState(history, newAnswers, currentQuestionId);
   }, [answers, history, currentQuestionId, saveState, questions]);
 
-  // MapsNext: Jawne przejście do następnego kroku (wywoływane przyciskiem "Dalej")
-  const MapsNext = useCallback(() => {
+  // handleNext: explicit step forward (triggered by the "Dalej" button)
+  const handleNext = useCallback(() => {
     if (!currentQuestionId) return;
 
-    setDirection(1); // Mark as forward movement
-    const seq = getSequence(answers);
+    const seq = sequence;
     const currentIndex = seq.indexOf(currentQuestionId);
     const nextId = currentIndex >= 0 && currentIndex < seq.length - 1 ? seq[currentIndex + 1] : null;
 
+    if (!nextId) return; // Guard: no next question available
+
+    setDirection(1);
     const newHistory = [...history, currentQuestionId];
     saveState(newHistory, answers, nextId);
-  }, [answers, history, currentQuestionId, saveState, getSequence]);
+  }, [answers, history, currentQuestionId, saveState, sequence]);
 
   // MapsBack
   const handleBack = useCallback(() => {
@@ -118,24 +145,106 @@ export function useQuizEngine(userId: string, version: QuizVersion | null, quest
     }
   }, [history, answers, saveState]);
 
-  // Dynamiczny Horyzont: szacunkowa liczba pytań = odpowiedziane + aktualna ścieżka
-  const estimatedTotalQuestions = history.length + getSequence(answers).length;
-  const isLastQuestion = Boolean(currentQuestionId) && history.length + 1 >= estimatedTotalQuestions;
+  // 1. Dynamiczny, inteligentny mianownik (Zastępuje stare maxTotalQuestions i estimatedTotalQuestions)
+  const estimatedTotalQuestions = useMemo(() => {
+    if (!version || !version.layout_data) return 0;
 
-  // Progress w oparciu o aktualną ścieżkę
+    function getPossibleMaxDepth(items: LayoutItem[]): number {
+      if (!items || items.length === 0) return 0;
+      let maxLength = 0;
+      
+      for (const item of items) {
+        maxLength += 1; // Liczymy obecne pytanie
+        const itemAnswers = answers[item.question_id];
+
+        if (itemAnswers && itemAnswers.length > 0) {
+          // Użytkownik odpowiedział - idziemy TYLKO wybraną, rzeczywistą ścieżką
+          const takenPath = item.paths?.find(p => itemAnswers.includes(p.answer_id));
+          if (takenPath && takenPath.children && takenPath.children.length > 0) {
+            maxLength += getPossibleMaxDepth(takenPath.children);
+          }
+        } else {
+          // Brak odpowiedzi - symulujemy najdłuższą możliwą ścieżkę z tego punktu
+          let maxChild = 0;
+          if (item.paths && item.paths.length > 0) {
+            for (const path of item.paths) {
+              const childDepth = getPossibleMaxDepth(path.children);
+              if (childDepth > maxChild) {
+                maxChild = childDepth;
+              }
+            }
+          }
+          maxLength += maxChild;
+        }
+      }
+      return maxLength;
+    }
+
+    return getPossibleMaxDepth(version.layout_data);
+  }, [version, answers]);
+
+  // 2. Niezawodne badanie ostatniego pytania
+  const isLastQuestion = useMemo(() => {
+    if (!currentQuestionId || !version) return false;
+
+    const seq = sequence;
+    const idx = seq.indexOf(currentQuestionId);
+
+    // Jeśli po obecnym pytaniu są już ustawione w kolejce inne, to nie jest to koniec
+    if (idx >= 0 && idx < seq.length - 1) return false;
+
+    const hasAnswered = answers[currentQuestionId] && answers[currentQuestionId].length > 0;
+
+    if (hasAnswered) {
+      // Skoro odpowiedział, a getSequence nie dodało nic nowego - to był koniec
+      return idx === seq.length - 1;
+    } else {
+      // Nie odpowiedział. Sprawdzamy, czy to pytanie w ogóle posiada ukryte ścieżki w CMS
+      let hasPaths = false;
+      function checkPaths(items: LayoutItem[]) {
+        for (const item of items) {
+          if (item.question_id === currentQuestionId) {
+            if (item.paths && item.paths.some(p => p.children && p.children.length > 0)) {
+              hasPaths = true;
+            }
+            return;
+          }
+          if (item.paths) {
+            for (const path of item.paths) {
+              checkPaths(path.children);
+            }
+          }
+        }
+      }
+      checkPaths(version.layout_data);
+
+      if (hasPaths) return false; // Odpowiedź otworzy nowe pytania, pokazuj "Dalej"
+      return true; // Pytanie nie ma ścieżek i jest ostatnie w kolejce, pokazuj "Zapisz wynik"
+    }
+  }, [currentQuestionId, version, answers, sequence]);
+
+  // 3. Płynny i logiczny pasek postępu
   const getProgress = useCallback(() => {
     if (!version || estimatedTotalQuestions === 0) return 0;
     
-    // Procent = historia / szacunkowy total
-    return Math.round((history.length / estimatedTotalQuestions) * 100);
-  }, [history.length, estimatedTotalQuestions]);
+    const hasAnswered = currentQuestionId ? (answers[currentQuestionId] && answers[currentQuestionId].length > 0) : false;
+    
+    // Równe 100% dopiero na faktycznym końcu z zaznaczoną odpowiedzią
+    if (isLastQuestion && hasAnswered) return 100;
+    
+    // Wliczamy obecne pytanie do widocznego postępu (history.length + 1)
+    const currentStep = history.length + 1;
+    const percentage = Math.round((currentStep / estimatedTotalQuestions) * 100);
+    
+    return Math.min(100, percentage);
+  }, [isLastQuestion, history.length, estimatedTotalQuestions, version, currentQuestionId, answers]);
 
   // Snapshot generation
   const submitQuiz = useCallback((): QuizSubmissionPayload | null => {
     if (!version) return null;
 
     // Pobierz ostateczną ścieżkę na podstawie aktualnych odpowiedzi (Garbage Collection osieroconych ścieżek)
-    const finalSequence = getSequence(answers);
+    const finalSequence = computeSequence(answers);
     
     // Filtrujemy tylko te pytania z ostatecznej ścieżki, na które padła odpowiedź
     const answeredQuestionIds = finalSequence.filter(qId => answers[qId] && answers[qId].length > 0);
@@ -170,7 +279,7 @@ export function useQuizEngine(userId: string, version: QuizVersion | null, quest
       version_id: version.id,
       answers: payloadAnswers
     };
-  }, [history, answers, questions, version]);
+  }, [history, answers, questions, version, computeSequence]);
 
   return {
     currentQuestionId,
@@ -180,7 +289,7 @@ export function useQuizEngine(userId: string, version: QuizVersion | null, quest
     estimatedTotalQuestions,
     isLastQuestion,
     handleAnswer,
-    MapsNext,
+    handleNext,
     handleBack,
     getProgress,
     submitQuiz,

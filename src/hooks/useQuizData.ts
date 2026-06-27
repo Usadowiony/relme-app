@@ -21,9 +21,9 @@ export function useQuizData() {
       setQuestions(qData)
       setTags(tData)
       setPaths(pData)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to fetch quiz data', err)
-      setError(err.message || 'Nie udało się pobrać danych quizu.')
+      setError(err instanceof Error ? err.message : 'Nie udało się pobrać danych quizu.')
     } finally {
       setIsLoading(false)
     }

@@ -57,11 +57,10 @@ function OnboardingPage() {
 
   const renderFieldError = (content: string, isVisible: boolean) => (
     <div
-      className={`mt-2 overflow-hidden transition-[max-height,opacity,transform] duration-200 ease-in-out ${
-        isVisible
-          ? 'max-h-14 translate-y-0 opacity-100'
-          : 'max-h-0 -translate-y-1 opacity-0'
-      }`}
+      className={`mt-2 overflow-hidden transition-[max-height,opacity,transform] duration-200 ease-in-out ${isVisible
+        ? 'max-h-14 translate-y-0 opacity-100'
+        : 'max-h-0 -translate-y-1 opacity-0'
+        }`}
     >
       <p className="pl-2 font-manrope text-[12px] sm:text-sm font-medium text-red-700">{content}</p>
     </div>
@@ -80,7 +79,7 @@ function OnboardingPage() {
       <main className="flex min-h-svh flex-col bg-neutral px-6 py-8 text-dark sm:bg-transparent lg:max-w-5xl 2xl:max-w-[1440px] mx-auto w-full">
         <TopNavigation
           className="hidden md:block"
-          leftSlot={<img src={logoLong} alt="Relme" className="h-8 w-auto" />}
+          leftSlot={<img src={logoLong} alt="Relme" className="h-8 4xl:h-10 w-auto" />}
           rightSlot={
             <button
               type="button"
@@ -89,28 +88,28 @@ function OnboardingPage() {
               }}
               className="inline-flex items-center gap-2 font-manrope text-sm font-semibold text-dark/85 underline-offset-4 hover:underline"
             >
-              <LogOut className="size-4" />
+              <LogOut className="size-4 4xl:size-6" />
               Wyloguj sie
             </button>
           }
         />
 
-        <div className="mx-auto mt-2 w-full max-w-[760px] xs:px-4 2sm:px-14 sm:px-0 sm:max-w-[500px] sm:mx-auto sm:mt-14 md:max-w-[600px] lg:max-w-[700px] flex flex-1 flex-col sm:flex-none">
-          <h1 className="mt-10 text-[40px] xs:text-[48px] leading-[1.05] font-semibold tracking-[-1.2px] text-dark sm:text-[60px]">
+        <div className="mx-auto mt-2 w-full max-w-[760px] xs:px-4 2sm:px-14 sm:px-0 sm:max-w-[500px] sm:mx-auto sm:mt-10 md:mt-0 md:max-w-[600px] flex flex-1 flex-col sm:flex-none md:flex md:flex-1 md:justify-center">
+          <h1 className="mt-10 md:mt-6 text-[40px] xs:text-[48px] leading-[1.05] font-semibold tracking-[-1.2px] text-dark sm:text-[54px]">
             Opowiedz nam
-            <br className="lg:hidden" />
+            <br className="md:hidden" />
             <span className="text-primary"> o sobie</span>
           </h1>
 
-          <p className="mt-5 xs:mt-7 max-w-[560px] font-manrope text-[18px] xs:text-[20px] font-normal tracking-[-0.2px] text-dark/80">
+          <p className="mt-5 xs:mt-6 max-w-[560px] font-manrope text-[18px] xs:text-[20px] md:text-[21px] font-normal tracking-[-0.2px] text-dark/80">
             {mobileStep === 1
               ? 'Nie chcesz być chyba dla nas nieznajomym, prawda?'
               : 'Potrzebujemy jeszcze kilku informacji zanim zaczniemy.'}
           </p>
 
-          <div className="mt-8 xs:mt-12 rounded-[28px] p-0 sm:mt-14 sm:rounded-[30px] sm:bg-white sm:p-10 sm:shadow-large flex flex-1 flex-col">
-            <form onSubmit={handleSubmit} className="flex flex-1 flex-col">
-              <div className="hidden sm:block md:p-2 lg:p-4">
+          <div className="mt-8 xs:mt-12 rounded-[28px] p-0 md:mt-8 sm:rounded-[30px] sm:bg-white sm:p-8 md:py-10 md:px-12 sm:shadow-large flex flex-col">
+            <form onSubmit={handleSubmit} className="flex flex-col">
+              <div className="hidden sm:block">
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                   <div>
                     <Input
@@ -185,7 +184,7 @@ function OnboardingPage() {
                   />
                 </div>
 
-                <div className="mt-12 md:mt-18 lg:mt-20 mx-auto w-full">
+                <div className="mt-12 lg:mt-14 mx-auto w-full">
                   {formErrorMessage ? (
                     <p className="mb-4 text-center font-manrope text-[12px] sm:text-sm font-medium text-red-700">
                       {formErrorMessage}

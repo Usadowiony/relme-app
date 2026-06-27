@@ -13,15 +13,18 @@ export function resolveOAuthRedirectUrl() {
 
 export function clearPendingSignupSession() {
   sessionStorage.removeItem('pending_signup_email')
-  sessionStorage.removeItem('pending_signup_password')
   sessionStorage.removeItem('pending_signup_started_at')
+}
+
+/** Zwraca true jeśli błąd pochodzi z niepotwierdzenia emaila przez użytkownika. */
+export function isEmailNotConfirmedError(message: string) {
+  return message.toLowerCase().includes('email not confirmed')
 }
 
 export function mapSignInErrorMessage(message: string) {
   const normalized = message.toLowerCase()
   if (normalized.includes('missing email or phone')) return 'Musisz wypełnić wszystkie wymagane pola.'
   if (normalized.includes('invalid login credentials')) return 'Nieprawidłowy adres email lub hasło.'
-  if (normalized.includes('email not confirmed')) return 'Adres email nie został jeszcze potwierdzony. Dokończ aktywację konta.'
   return message
 }
 

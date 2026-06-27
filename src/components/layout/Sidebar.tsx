@@ -13,7 +13,7 @@ import {
   User
 } from 'lucide-react'
 import logoLong from '../../assets/icons/logo-long.svg'
-import { signOut } from '../../api/auth.api'
+import { useLogout } from '../../hooks/useLogout'
 import type { AppRole, Profile } from '../../types/auth'
 import { useNavigate } from 'react-router-dom'
 
@@ -42,25 +42,23 @@ const NAV_ITEMS: NavItem[] = [
 
 export function Sidebar({ role, profile, currentPath = '/dashboard' }: SidebarProps) {
   const navigate = useNavigate()
+  const logout = useLogout()
   const visibleNavItems = NAV_ITEMS.filter(item => role && item.roles.includes(role))
 
-  const handleLogout = async () => {
-    await signOut()
-    window.location.href = '/login'
-  }
+  const handleLogout = () => void logout()
 
   const roleLabels: Record<AppRole, string> = {
-    user: 'Użytkownik',
+    user: 'Darmowy Plan',
     mentor: 'Mentor',
     admin: 'Admin'
   }
 
   return (
-    <aside className="h-screen sticky top-0 bg-[#ffffff] shadow-[4px_0_24px_rgba(0,0,0,0.03)] flex flex-col py-18 px-6 lg:px-8 z-20">
+    <aside className="h-screen sticky top-0 bg-[#ffffff] shadow-[4px_0_24px_rgba(0,0,0,0.03)] flex flex-col py-10 3xl:py-14 4xl:py-18 px-6 4xl:px-8 z-20">
 
       {/* Top Block: Logo and Profile */}
-      <div className="flex flex-col items-center mb-10 lg:mb-12">
-        <img src={logoLong} alt="Relme" className="h-8 lg:h-10 w-auto object-contain mb-10" />
+      <div className="flex flex-col items-center mb-8 4xl:mb-12">
+        <img src={logoLong} alt="Relme" className="h-8 lg:h-10 w-auto object-contain mb-6 4xl:mb-10" />
 
         <div className="flex flex-col items-center">
           <div className="flex items-center gap-6">
@@ -82,7 +80,7 @@ export function Sidebar({ role, profile, currentPath = '/dashboard' }: SidebarPr
           </div>
 
           {role && (
-            <div className="mt-8 lg:mt-10 px-4 py-1.5 lg:py-2 rounded-full bg-[#E1AAA7] text-white text-[10px] font-bold tracking-[1.07px] uppercase shadow-sm">
+            <div className="mt-6 4xl:mt-10 px-5 4xl:px-6 py-2 4xl:py-2.5 rounded-full bg-[#E1AAA7] text-white text-[10px] font-bold tracking-[1.07px] uppercase shadow-sm">
               {roleLabels[role]}
             </div>
           )}
@@ -91,7 +89,7 @@ export function Sidebar({ role, profile, currentPath = '/dashboard' }: SidebarPr
 
       {/* Middle Block: Navigation */}
       <div className="flex-1 overflow-y-auto w-full">
-        <nav className="flex flex-col gap-2">
+        <nav className="flex flex-col gap-1 4xl:gap-2">
           {visibleNavItems.map((item) => {
             const isActive = currentPath === item.path || (currentPath === '/' && item.path === '/dashboard')
             return (
@@ -100,7 +98,7 @@ export function Sidebar({ role, profile, currentPath = '/dashboard' }: SidebarPr
                 onClick={() => {
                   navigate(item.path)
                 }}
-                className={`group cursor-pointer w-full flex items-center gap-3 lg:gap-4 px-[18px] lg:px-[20px] py-[14px] lg:py-[16px] rounded-[12px] lg:rounded-[14px] transition-all duration-200 font-manrope font-medium text-[14px] lg:text-[16px] leading-[24px] border ${isActive
+                className={`group cursor-pointer w-full flex items-center gap-3 lg:gap-4 px-[18px] lg:px-[20px] py-[14px] 4xl:py-[16px] rounded-[12px] lg:rounded-[14px] transition-all duration-200 font-manrope font-medium text-[14px] lg:text-[16px] leading-[24px] border ${isActive
                   ? 'bg-neutral text-dark border-dark'
                   : 'text-dark/60 hover:bg-gray/20 hover:text-dark border-transparent'
                   }`}
@@ -114,31 +112,27 @@ export function Sidebar({ role, profile, currentPath = '/dashboard' }: SidebarPr
 
         {role === 'admin' && (
           <>
-            <div className="my-6 mx-4 border-t border-gray" />
+            <div className="my-3 4xl:my-6 mx-4 border-t border-gray" />
 
-            <nav className="flex flex-col gap-2">
-              <button className="group cursor-pointer w-full flex items-center gap-3 lg:gap-4 px-[18px] lg:px-[20px] py-[14px] lg:py-[16px] rounded-[12px] lg:rounded-[14px] transition-all duration-200 font-manrope font-medium text-[14px] lg:text-[16px] leading-[24px] text-dark/60 hover:bg-gray/20 hover:text-dark border border-transparent">
+            <nav className="flex flex-col gap-1 4xl:gap-2">
+              <button className="group cursor-pointer w-full flex items-center gap-3 lg:gap-4 px-[18px] lg:px-[20px] py-[14px] 4xl:py-[16px] rounded-[12px] lg:rounded-[14px] transition-all duration-200 font-manrope font-medium text-[14px] lg:text-[16px] leading-[24px] text-dark/60 hover:bg-gray/20 hover:text-dark border border-transparent">
                 <Settings className="size-[16px] lg:size-[18px] text-dark/60 transition-colors duration-200 group-hover:text-dark" />
                 <span>Ustawienia</span>
               </button>
-              <button className="group cursor-pointer w-full flex items-center gap-3 lg:gap-4 px-[18px] lg:px-[20px] py-[14px] lg:py-[16px] rounded-[12px] lg:rounded-[14px] transition-all duration-200 font-manrope font-medium text-[14px] lg:text-[16px] leading-[24px] text-dark/60 hover:bg-gray/20 hover:text-dark border border-transparent">
+              <button className="group cursor-pointer w-full flex items-center gap-3 lg:gap-4 px-[18px] lg:px-[20px] py-[14px] 4xl:py-[16px] rounded-[12px] lg:rounded-[14px] transition-all duration-200 font-manrope font-medium text-[14px] lg:text-[16px] leading-[24px] text-dark/60 hover:bg-gray/20 hover:text-dark border border-transparent">
                 <Flag className="size-[16px] lg:size-[18px] text-dark/60 transition-colors duration-200 group-hover:text-dark" />
                 <span>Pomoc</span>
+              </button>
+              <button
+                onClick={handleLogout}
+                className="group cursor-pointer w-full flex items-center gap-3 lg:gap-4 px-[18px] lg:px-[20px] py-[14px] 4xl:py-[16px] rounded-[12px] lg:rounded-[14px] transition-all duration-200 font-manrope font-medium text-[14px] lg:text-[16px] leading-[24px] text-dark/60 hover:bg-gray/20 hover:text-dark border border-transparent"
+              >
+                <LogOut className="size-[16px] lg:size-[18px] text-dark/60 transition-colors duration-200 group-hover:text-dark" />
+                <span>Wyloguj się</span>
               </button>
             </nav>
           </>
         )}
-      </div>
-
-      {/* Bottom Block: Logout */}
-      <div className="mt-auto pt-4 w-full">
-        <button
-          onClick={handleLogout}
-          className="group cursor-pointer w-full flex items-center justify-center gap-3 lg:gap-4 px-[18px] lg:px-[20px] py-[14px] lg:py-[16px] rounded-[12px] lg:rounded-[14px] transition-all duration-200 font-manrope font-medium text-[14px] lg:text-[16px] leading-[24px] text-dark/60 hover:bg-gray/20 hover:text-dark border border-transparent"
-        >
-          <LogOut className="size-[16px] lg:size-[18px] text-dark/60 transition-colors duration-200 group-hover:text-dark" />
-          <span>Wyloguj się</span>
-        </button>
       </div>
 
     </aside>

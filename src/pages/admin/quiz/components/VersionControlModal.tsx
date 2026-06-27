@@ -28,6 +28,7 @@ export function VersionControlModal({
   const [saveName, setSaveName] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [actionId, setActionId] = useState<string | null>(null)
+  const [errorMessage, setErrorMessage] = useState('')
 
   useEffect(() => {
     if (isOpen) {
@@ -38,12 +39,13 @@ export function VersionControlModal({
 
   const fetchVersions = async () => {
     setIsLoading(true)
+    setErrorMessage('')
     try {
       const data = await getQuizVersions()
       setVersions(data)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to fetch quiz versions:', err)
-      alert(err.message || 'Nie udało się pobrać wersji quizu.')
+      setErrorMessage(err instanceof Error ? err.message : 'Nie udało się pobrać wersji quizu.')
     } finally {
       setIsLoading(false)
     }
@@ -56,9 +58,9 @@ export function VersionControlModal({
       await saveQuizDraft(saveName.trim(), currentLayoutItems)
       await fetchVersions()
       setSaveName('')
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Failed to save draft:', err)
-      alert('Nie udało się zapisać draftu.')
+      setErrorMessage(err instanceof Error ? err.message : 'Nie udało się zapisać draftu.')
     } finally {
       setIsSaving(false)
     }
@@ -70,9 +72,9 @@ export function VersionControlModal({
     try {
       await deleteQuizVersion(id)
       await fetchVersions()
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Failed to delete version:', err)
-      alert('Nie udało się usunąć zapisanej wersji. Spróbuj ponownie.')
+      setErrorMessage(err instanceof Error ? err.message : 'Nie udało się usunąć zapisanej wersji. Spróbuj ponownie.')
     } finally {
       setActionId(null)
     }
@@ -90,9 +92,9 @@ export function VersionControlModal({
       await publishQuizVersion(id)
       await fetchVersions()
       onPublished()
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Failed to publish:', err)
-      alert('Nie udało się opublikować wersji.')
+      setErrorMessage(err instanceof Error ? err.message : 'Nie udało się opublikować wersji.')
     } finally {
       setActionId(null)
     }
@@ -120,6 +122,13 @@ export function VersionControlModal({
         </AsyncButton>
       }
     >
+      {/* Inline error banner — replaces old browser alert() */}
+      {errorMessage && (
+        <div className="bg-red-50 border border-red-200 text-red-700 text-[13px] font-medium rounded-[12px] px-4 py-3">
+          {errorMessage}
+        </div>
+      )}
+
       {/* Save current draft */}
       <div className="bg-neutral rounded-[16px] p-5 border border-dark/20">
         <label className="block text-[10px] font-bold tracking-widest text-dark/60 uppercase mb-3">

@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { isSupabaseConfigured, supabase } from '../api/supabase'
+import { useNavigate } from 'react-router-dom'
+import { isSupabaseConfigured } from '../api/supabase'
 import { getMyProfile, updateMyProfile } from '../api/profile.api'
+import { useAnimatedFieldError } from './useAnimatedFieldError'
+import { useLogout } from './useLogout'
 import type { Profile, ProfileGender } from '../types/auth'
 
 const NAME_MIN_LENGTH = 2
@@ -50,32 +53,10 @@ export function getDateOfBirthError(value: string, todayDate: string) {
   return ''
 }
 
-export function useAnimatedFieldError(errorMessage: string, shouldShow: boolean) {
-  const [content, setContent] = useState('')
-  const [isVisible, setIsVisible] = useState(false)
-
-  useEffect(() => {
-    let hideTimer: number | undefined
-    let frameId: number | undefined
-
-    if (shouldShow && errorMessage) {
-      setContent(errorMessage)
-      frameId = window.requestAnimationFrame(() => setIsVisible(true))
-    } else {
-      setIsVisible(false)
-      hideTimer = window.setTimeout(() => setContent(''), 220)
-    }
-
-    return () => {
-      if (hideTimer) window.clearTimeout(hideTimer)
-      if (frameId) window.cancelAnimationFrame(frameId)
-    }
-  }, [errorMessage, shouldShow])
-
-  return { content, isVisible }
-}
 
 export function useOnboarding() {
+  const navigate = useNavigate()
+  const logout = useLogout()
   const [isLoadingProfile, setIsLoadingProfile] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [mobileStep, setMobileStep] = useState<1 | 2>(1)
@@ -159,11 +140,7 @@ export function useOnboarding() {
     return !(isLoadingProfile || isSubmitting || hasFirstNameError || hasLastNameError || hasDateOfBirthError)
   }, [hasDateOfBirthError, hasFirstNameError, hasLastNameError, isLoadingProfile, isSubmitting])
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut()
-    window.history.replaceState({}, '', '/login')
-    window.dispatchEvent(new PopStateEvent('popstate'))
-  }
+  const handleSignOut = () => void logout()
 
   const handleNextMobileStep = () => {
     setFormErrorMessage('')
@@ -206,8 +183,7 @@ export function useOnboarding() {
       await updateMyProfile(updates)
       
       window.dispatchEvent(new Event('profileUpdated'))
-      window.history.replaceState({}, '', '/')
-      window.dispatchEvent(new PopStateEvent('popstate'))
+      navigate('/', { replace: true })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
       setFormErrorMessage(mapProfileSaveErrorMessage(message))

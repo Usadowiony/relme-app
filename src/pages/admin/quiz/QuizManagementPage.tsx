@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { Plus, PlayCircle, History, Tag } from 'lucide-react'
 import { QuestionsTab } from './QuestionsTab'
 import { TagsTab } from './TagsTab'
@@ -28,7 +28,21 @@ export function QuizManagementPage() {
   const [isVersionControlOpen, setIsVersionControlOpen] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
 
-  const currentDraft = loadDraftFromLocal()
+  // 5.3 FIX: Avoid re-parsing localStorage JSON on every render.
+  // Counter increments only on 'draftUpdated' events, causing useMemo to recompute.
+  const [draftRevision, setDraftRevision] = useState(0)
+
+  const handleDraftUpdated = useCallback(() => {
+    setDraftRevision(prev => prev + 1)
+  }, [])
+
+  useEffect(() => {
+    window.addEventListener('draftUpdated', handleDraftUpdated)
+    return () => window.removeEventListener('draftUpdated', handleDraftUpdated)
+  }, [handleDraftUpdated])
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const currentDraft = useMemo(() => loadDraftFromLocal(), [draftRevision])
 
   const tabLabels: Record<TabType, string> = {
     questions: 'Pytania i odpowiedzi',

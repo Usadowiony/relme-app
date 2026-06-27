@@ -27,7 +27,7 @@ export default function QuizChoiceButton({ isSelected, onClick, children, classN
           } ${className}`}
       >
         <div
-          className={`flex-shrink-0 w-6 h-6 md:w-7 md:h-7 rounded-full mr-4 flex items-center justify-center transition-colors duration-300 ${isSelected ? 'border-2  border-[#558C9B] bg-[#558C9B]' : 'bg-[#E4E7E9] border-2 border-white/50 '
+          className={`flex-shrink-0 w-6 h-6 3xl:w-7 3xl:h-7 rounded-full mr-4 flex items-center justify-center transition-colors duration-300 ${isSelected ? 'border-2  border-[#558C9B] bg-[#558C9B]' : 'bg-[#E4E7E9] border-2 border-white/50 '
             }`}
         >
           <AnimatePresence>
@@ -45,7 +45,7 @@ export default function QuizChoiceButton({ isSelected, onClick, children, classN
           </AnimatePresence>
         </div>
 
-        <span className="font-semibold text-[12px] 2xs:text-[13px] xs:text-[14px] 2sm:text-[15px] md:text-[16px] leading-snug">{children}</span>
+        <span className="font-semibold text-[12px] 2xs:text-[13px] xs:text-[14px] 2sm:text-[15px] 3xl:text-[16px] leading-snug">{children}</span>
       </motion.button>
     </div>
   )

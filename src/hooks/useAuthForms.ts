@@ -1,4 +1,6 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, useEffect, type FormEvent } from 'react'
+import { useAnimatedFieldError } from './useAnimatedFieldError'
+import { useNavigate } from 'react-router-dom'
 import { isSupabaseConfigured } from '../api/supabase'
 import {
   clearPendingSignupSession,
@@ -7,6 +9,7 @@ import {
   signInWithEmail,
   signInWithGoogle,
   signUpWithEmail,
+  isEmailNotConfirmedError,
 } from '../api/auth.api'
 
 export type AuthMode = 'login' | 'register'
@@ -15,36 +18,9 @@ export const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 export const uppercasePattern = /[A-Z]/
 export const specialCharacterPattern = /[^A-Za-z0-9]/
 
-export function useAnimatedFieldError(errorMessage: string, shouldShow: boolean) {
-  const [content, setContent] = useState('')
-  const [isVisible, setIsVisible] = useState(false)
-
-  useEffect(() => {
-    let hideTimer: number | undefined
-    let frameId: number | undefined
-
-    if (shouldShow && errorMessage) {
-      setContent(errorMessage)
-      frameId = window.requestAnimationFrame(() => {
-        setIsVisible(true)
-      })
-    } else {
-      setIsVisible(false)
-      hideTimer = window.setTimeout(() => {
-        setContent('')
-      }, 220)
-    }
-
-    return () => {
-      if (hideTimer) window.clearTimeout(hideTimer)
-      if (frameId) window.cancelAnimationFrame(frameId)
-    }
-  }, [errorMessage, shouldShow])
-
-  return { content, isVisible }
-}
 
 export function useAuthForms() {
+  const navigate = useNavigate()
   const [authMode, setAuthMode] = useState<AuthMode>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -171,14 +147,22 @@ export function useAuthForms() {
           return
         }
 
-        window.history.pushState({}, '', '/verify-email')
-        window.dispatchEvent(new PopStateEvent('popstate'))
+        navigate('/verify-email')
         return
       }
 
       const { error } = await signInWithEmail(normalizedEmail, password)
 
       if (error) {
+        if (isEmailNotConfirmedError(error.message)) {
+          // Ustaw dane oczekującej weryfikacji, żeby EmailVerificationPage zadziałała
+          const pendingExpiryAt = String(Date.now() + 15 * 60 * 1000)
+          sessionStorage.setItem('pending_signup_email', normalizedEmail)
+          sessionStorage.setItem('pending_signup_started_at', pendingExpiryAt)
+          
+          navigate('/verify-email')
+          return
+        }
         setErrorMessage(mapSignInErrorMessage(error.message))
       }
     } finally {

@@ -30,9 +30,9 @@ export function AsyncButton({
 		link:
 			'md:cursor-pointer bg-transparent p-0 text-sm text-dark/85 hover:text-dark underline-offset-4 hover:underline disabled:opacity-50',
 		outline:
-			'md:cursor-pointer bg-transparent text-black outline outline-2 outline-offset-[-2px] px-12 md:px-20 py-3.5 2xs:py-4 rounded-full font-bold text-[15px] hover:bg-black/5 disabled:opacity-50',
+			'md:min-w-[270px] md:cursor-pointer bg-transparent text-black outline outline-2 outline-offset-[-2px] outline-black px-12 py-3.5 2xs:py-4 2sm:py-[18px] md:py-3.5 md:px-16 rounded-full font-bold text-[15px] xs:text-[14px] 2sm:text-[15px] sm:text-[16px] hover:bg-black/5 transition-all disabled:opacity-50',
 		quiz:
-			'md:cursor-pointer bg-dark/95 text-white px-12  py-3.5 2xs:py-4 2sm:py-[18px] md:py-3.5 md:px-20 rounded-full font-bold text-[13px] xs:text-[14px] 2sm:text-[15px] sm:text-[16px] hover:bg-dark/90 transition-all md:border-2 md:border-dark/95 disabled:bg-[#EBEDEE] disabled:text-[#A0AAB2] disabled:border-[#EBEDEE] disabled:cursor-not-allowed',
+			'md:min-w-[270px] md:cursor-pointer bg-dark/95 text-white outline outline-2 outline-offset-[-2px] outline-dark/95 px-12 py-3.5 2xs:py-4 2sm:py-[18px] md:py-3.5 md:px-16 rounded-full font-bold text-[15px] xs:text-[14px] 2sm:text-[15px] sm:text-[16px] hover:bg-dark/90 transition-all disabled:bg-[#EBEDEE] disabled:text-[#A0AAB2] disabled:outline-[#EBEDEE] disabled:cursor-not-allowed',
 		quizOutline:
 			'md:cursor-pointer bg-transparent text-black border-2 border-dark/20 px-12 md:px-20 py-3.5 2xs:py-4 2sm:py-[18px] rounded-full font-bold text-[13px] xs:text-[14px] 2sm:text-[15px] sm:text-[16px] hover:bg-black/5 hover:border-dark transition-all disabled:opacity-50 disabled:cursor-not-allowed',
 	}

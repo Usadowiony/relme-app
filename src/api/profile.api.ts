@@ -26,7 +26,7 @@ export async function getMyProfile() {
   for (let attempt = 0; attempt < TOTAL_ATTEMPTS; attempt += 1) {
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, first_name, last_name, date_of_birth, phone_number, gender, avatar_url, quiz_completed, created_at, updated_at')
+      .select('id, first_name, last_name, date_of_birth, gender, avatar_url, created_at, updated_at')
       .eq('id', user.id)
       .maybeSingle<Profile>()
 
@@ -76,7 +76,7 @@ export async function updateMyProfile(updates: ProfileUpdates) {
     .from('profiles')
     .update(updates)
     .eq('id', user.id)
-    .select('id, first_name, last_name, date_of_birth, phone_number, gender, avatar_url, quiz_completed, created_at, updated_at')
+    .select('id, first_name, last_name, date_of_birth, gender, avatar_url, created_at, updated_at')
     .single<Profile>()
 
   if (error) {
@@ -97,4 +97,22 @@ export function isProfileOnboardingComplete(profile: Profile) {
   const hasDateOfBirth = Boolean(profile.date_of_birth)
 
   return hasFirstName && hasLastName && hasGender && hasDateOfBirth
+}
+
+/** Pobiera status ukończenia quizu z osobnej tabeli user_quiz_status */
+export async function getQuizCompleted(): Promise<boolean> {
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError || !user) return false
+
+  const { data } = await supabase
+    .from('user_quiz_status')
+    .select('quiz_completed')
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  return data?.quiz_completed ?? false
 }

@@ -14,6 +14,27 @@ import type {
 import { validateTagPayload } from '../utils/validation'
 import { countLayoutQuestions } from '../utils/quizTree'
 
+// --- Stałe walidacyjne ---
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+// --- Asercja autoryzacyjna (defense-in-depth) ---
+// Odpytuje tabelę user_roles zamiast user_metadata,
+// ponieważ user_metadata jest edytowalne z klienta (updateUser).
+async function assertAdminRole(): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Brak zalogowanego użytkownika.')
+
+  const { data: roleData } = await supabase
+    .from('user_roles')
+    .select('role')
+    .eq('user_id', user.id)
+    .single()
+
+  if (roleData?.role !== 'admin') {
+    throw new Error('Brak uprawnień administratora.')
+  }
+}
+
 // Fetching Tags
 export async function getTags(): Promise<Tag[]> {
   const { data, error } = await supabase
@@ -30,6 +51,7 @@ export async function getTags(): Promise<Tag[]> {
 
 // Create Tag
 export async function createTag(tag: Pick<Tag, 'slug' | 'color' | 'is_scored'>): Promise<Tag> {
+  await assertAdminRole()
   validateTagPayload(tag)
 
   const { data, error } = await supabase
@@ -44,6 +66,7 @@ export async function createTag(tag: Pick<Tag, 'slug' | 'color' | 'is_scored'>):
 
 // Update Tag
 export async function updateTag(id: string, tag: Partial<Tag>): Promise<Tag> {
+  await assertAdminRole()
   validateTagPayload(tag)
 
   const { data, error } = await supabase
@@ -59,6 +82,8 @@ export async function updateTag(id: string, tag: Partial<Tag>): Promise<Tag> {
 
 // Delete Tag
 export async function deleteTag(id: string): Promise<void> {
+  await assertAdminRole()
+
   const { error } = await supabase
     .from('tags')
     .delete()
@@ -112,6 +137,7 @@ export async function saveQuestionWithAnswers(
   question: QuestionPayload,
   answers: AnswerPayload[]
 ): Promise<void> {
+  await assertAdminRole()
   // --- Backend Validation ---
   if (!question.content || question.content.trim().length === 0) {
     throw new Error('Treść pytania nie może być pusta.')
@@ -180,7 +206,7 @@ export async function saveQuestionWithAnswers(
   };
 
   const { error } = await supabase.rpc('save_question_with_answers_rpc', { payload });
-  
+
   if (error) {
     console.error("RAW SUPABASE ERROR:", error);
     if (error.code === '23503') {
@@ -191,6 +217,8 @@ export async function saveQuestionWithAnswers(
 }
 
 export async function deleteQuestion(id: string): Promise<void> {
+  await assertAdminRole()
+
   const { error } = await supabase.from('questions').delete().eq('id', id);
   if (error) throw error;
 }
@@ -231,6 +259,8 @@ export async function getQuizVersions(): Promise<QuizVersion[]> {
 }
 
 export async function saveQuizDraft(name: string, layoutData: LayoutItem[]): Promise<QuizVersion> {
+  await assertAdminRole()
+
   if (!name || name.trim().length === 0) {
     throw new Error('Nazwa draftu nie może być pusta.')
   }
@@ -254,6 +284,8 @@ export async function saveQuizDraft(name: string, layoutData: LayoutItem[]): Pro
 }
 
 export async function updateQuizDraft(id: string, name: string, layoutData: LayoutItem[]): Promise<void> {
+  await assertAdminRole()
+
   const { error } = await supabase
     .from('quiz_versions')
     .update({
@@ -267,6 +299,8 @@ export async function updateQuizDraft(id: string, name: string, layoutData: Layo
 }
 
 export async function deleteQuizVersion(id: string): Promise<void> {
+  await assertAdminRole()
+
   const { error } = await supabase
     .from('quiz_versions')
     .delete()
@@ -276,12 +310,15 @@ export async function deleteQuizVersion(id: string): Promise<void> {
 }
 
 export async function publishQuizVersion(id: string): Promise<void> {
+  await assertAdminRole()
+
   try {
     const { error } = await supabase.rpc('publish_quiz_version_rpc', { target_version_id: id })
     if (error) throw error
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error publishing quiz version:', error)
-    throw new Error(error.message || 'Nie udało się opublikować wersji quizu. Spróbuj ponownie.')
+    const message = error instanceof Error ? error.message : 'Nie udało się opublikować wersji quizu. Spróbuj ponownie.'
+    throw new Error(message)
   }
 }
 
@@ -345,6 +382,23 @@ export async function getLiveQuiz(): Promise<{ version: QuizVersion, questions: 
 }
 
 export async function submitQuizResult(payload: QuizSubmissionPayload): Promise<void> {
+  // --- Guard Clauses (walidacja strukturalna) ---
+  if (!payload.version_id || !UUID_REGEX.test(payload.version_id)) {
+    throw new Error('Nieprawidłowy identyfikator wersji quizu.')
+  }
+  if (!Array.isArray(payload.answers) || payload.answers.length === 0) {
+    throw new Error('Brak odpowiedzi do zapisania.')
+  }
+  for (const answer of payload.answers) {
+    if (!answer.question_id || !UUID_REGEX.test(answer.question_id)) {
+      throw new Error('Nieprawidłowy identyfikator pytania w odpowiedziach.')
+    }
+    if (!Array.isArray(answer.selected_answer_ids) || answer.selected_answer_ids.length === 0) {
+      throw new Error('Brak zaznaczonych odpowiedzi dla jednego z pytań.')
+    }
+  }
+  // --- Koniec walidacji ---
+
   const { error } = await supabase.rpc('submit_quiz_result_rpc', {
     payload
   })
@@ -356,4 +410,27 @@ export async function submitQuizResult(payload: QuizSubmissionPayload): Promise<
     }
     throw new Error('Nie udało się zapisać wyniku quizu. Spróbuj ponownie.')
   }
+}
+//Do zapamiętania do zrobienia w przyszłości!
+//QuizResultPage renderuje surowy JSON z bazy
+//any na granicy API otwiera drzwi do XSS jeśli computed_result trafi do dangerouslySetInnerHTML lub niekontrolowanego renderowania. Typ powinien być zdefiniowany.
+//QuizResultPage renderuje surowy JSON z bazy
+//Jeśli computed_result zawiera złośliwe dane z bazy — mogą zostać wyrenderowane. Dopóki jest w <pre> to nie XSS, ale brak sanityzacji + any to ryzyko.
+export async function getUserQuizResult(): Promise<{ computed_result: any, payment_status: string, created_at: string } | null> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Brak zalogowanego użytkownika')
+
+  const { data, error } = await supabase
+    .from('quiz_submissions')
+    .select('computed_result, payment_status, created_at')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single()
+
+  if (error && error.code !== 'PGRST116') {
+    throw new Error('Błąd pobierania wyników')
+  }
+
+  return data || null
 }

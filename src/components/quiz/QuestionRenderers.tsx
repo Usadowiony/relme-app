@@ -70,14 +70,16 @@ export function ScaleRenderer({ answers, selectedIds, onSelect }: ScaleRendererP
       if (parsed.end) endLabel = parsed.end;
     }
   } catch (e) {
-
+    // Non-critical: malformed scale JSON — fall back to default labels.
+    // Log so the CMS admin can detect and fix the data.
+    console.warn('[ScaleRenderer] Malformed scale answer content, using default labels.', answers[0]?.content, e)
   }
 
   // Find index of selected answer to draw the filled track
   const selectedIndex = answers.findIndex(a => selectedIds.includes(a.id));
 
   return (
-    <div className="w-full px-2 2xs:px-0 flex flex-col gap-2 mt-8 md:mt-2 md:mb-8">
+    <div className="w-full px-2 2xs:px-0 flex flex-col gap-2 mt-8 md:mt-4 md:mb-4 md:px-6">
 
       <QuizSlider
         answers={answers}
@@ -86,7 +88,7 @@ export function ScaleRenderer({ answers, selectedIds, onSelect }: ScaleRendererP
       />
 
       {/* Labels */}
-      <div className="flex justify-between font-semibold text-[12px] 2xs:text-[13px] 2sm:text-[14px] tracking-tighter leading-tight text-center md:text-[15px] text-dark/90 md:mt-6 px-1">
+      <div className="flex justify-between font-semibold text-[12px] 2xs:text-[13px] 2sm:text-[14px] tracking-tighter leading-tight text-center md:text-[15px] text-dark/90 md:mt-3 px-1 md:px-3">
         <span className='text-left'>{startLabel}</span>
         <span className='text-right'>{endLabel}</span>
       </div>
