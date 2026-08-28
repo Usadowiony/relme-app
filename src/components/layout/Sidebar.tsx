@@ -33,7 +33,7 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   { label: 'Strona główna', icon: Home, path: '/dashboard', roles: ['user', 'mentor', 'admin'] },
   { label: 'Quiz', icon: List, path: '/admin/quiz', roles: ['admin'] },
-  { label: 'Moduły', icon: LayoutGrid, path: '/modules', roles: ['admin'] },
+  { label: 'Moduły', icon: LayoutGrid, path: '/admin/modules', roles: ['admin'] },
   { label: 'Kalendarz', icon: Calendar, path: '/calendar', roles: ['admin'] },
   { label: 'Mentorzy', icon: Headset, path: '/mentors', roles: ['admin'] },
   { label: 'Użytkownicy', icon: Users, path: '/users', roles: ['admin'] },

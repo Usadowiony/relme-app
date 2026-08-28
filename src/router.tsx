@@ -19,6 +19,7 @@ import QuizPlayerPage from './pages/quiz/QuizPlayerPage'
 import QuizResultPage from './pages/quiz/QuizResultPage'
 import DashboardLayout from './components/layout/DashboardLayout'
 import { QuizManagementPage } from './pages/admin/quiz/QuizManagementPage'
+import { ModulesListPage } from './pages/admin/modules/ModulesListPage'
 
 // =============================================
 // TYPY LEJKA AUTORYZACJI
@@ -214,14 +215,7 @@ function DashboardHome() {
   )
 }
 
-function ModulesPage() {
-  return (
-    <div className="flex flex-col">
-      <h1 className="text-3xl font-manrope font-semibold tracking-tight">Moduły Wiedzy</h1>
-      <p className="mt-2 text-dark/70">Zarządzanie modułami, warsztatami i materiałami wideo.</p>
-    </div>
-  )
-}
+// ModulesPage placeholder usunięte — zastąpione przez ModulesListPage (T5.3a)
 
 function NotFoundPage() {
   return (
@@ -256,10 +250,10 @@ export const router = createBrowserRouter([
         element: <DashboardLayout><Outlet /></DashboardLayout>,
         children: [
           { path: '/dashboard', loader: dashboardLoader, element: <DashboardHome /> },
-          { path: '/modules', loader: dashboardLoader, element: <ModulesPage /> },
 
           // --- Strefa admina ---
           { path: '/admin/quiz', loader: adminLoader, element: <QuizManagementPage /> },
+          { path: '/admin/modules', loader: adminLoader, element: <ModulesListPage /> },
 
           // --- Catch-all ---
           { path: '*', loader: dashboardLoader, element: <NotFoundPage /> },
