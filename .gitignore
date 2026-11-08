@@ -29,3 +29,5 @@ dist-ssr
 # AI
 /.github/copilot-context.md
 /.github/copilot-instructions.md
+# MCP config (local only)
+/.mcp.json
