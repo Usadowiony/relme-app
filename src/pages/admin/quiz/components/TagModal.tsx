@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import type { Tag } from '../../../../types/quiz'
-import { BaseModal } from './BaseModal'
+import { BaseModal } from '../../../../components/ui/popups/BaseModal'
 import { Save } from 'lucide-react'
 import { AsyncButton } from '../../../../components/ui/buttons/Button'
 

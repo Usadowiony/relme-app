@@ -1,5 +1,7 @@
 import { createBrowserRouter, redirect, Outlet, useNavigation } from 'react-router-dom'
+import type { LoaderFunctionArgs } from 'react-router-dom'
 import { supabase } from './api/supabase'
+import { getModuleById } from './api/modules.api'
 import { getMyProfile, isProfileOnboardingComplete, getQuizCompleted } from './api/profile.api'
 import { getUserQuizResult } from './api/quiz.api'
 import type { AppRole, Profile } from './types/auth'
@@ -20,6 +22,7 @@ import QuizResultPage from './pages/quiz/QuizResultPage'
 import DashboardLayout from './components/layout/DashboardLayout'
 import { QuizManagementPage } from './pages/admin/quiz/QuizManagementPage'
 import { ModulesListPage } from './pages/admin/modules/ModulesListPage'
+import { ModuleEditorPage } from './pages/admin/modules/ModuleEditorPage'
 
 // =============================================
 // TYPY LEJKA AUTORYZACJI
@@ -184,6 +187,15 @@ async function adminLoader() {
   return state
 }
 
+// Admin — edytor modułu (moduł musi istnieć)
+async function moduleEditorLoader({ params }: LoaderFunctionArgs) {
+  const guard = await adminLoader()
+  if (guard instanceof Response) return guard
+  const module = params.moduleId ? await getModuleById(params.moduleId) : null
+  if (!module) return redirect('/admin/modules')
+  return module
+}
+
 // =============================================
 // ROOT LAYOUT: GlobalLoader + AuthProvider
 // =============================================
@@ -254,6 +266,7 @@ export const router = createBrowserRouter([
           // --- Strefa admina ---
           { path: '/admin/quiz', loader: adminLoader, element: <QuizManagementPage /> },
           { path: '/admin/modules', loader: adminLoader, element: <ModulesListPage /> },
+          { path: '/admin/modules/:moduleId', loader: moduleEditorLoader, element: <ModuleEditorPage /> },
 
           // --- Catch-all ---
           { path: '*', loader: dashboardLoader, element: <NotFoundPage /> },

@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import type { Module, ModuleFlowData } from '../types/modules'
+import { assertValidFlowStructure, normalizeFlow, validateFlowContent } from '../utils/moduleFlow'
 
 // --- Asercja autoryzacyjna (defense-in-depth) ---
 // Odpytuje tabelę user_roles zamiast user_metadata,
@@ -19,6 +20,10 @@ async function assertAdminRole(): Promise<void> {
   }
 }
 
+function toModule(row: Record<string, unknown>): Module {
+  return { ...(row as Module), flow_data: normalizeFlow(row.flow_data) }
+}
+
 // =============================================
 // MODULES CRUD
 // =============================================
@@ -30,11 +35,8 @@ export async function getModules(): Promise<Module[]> {
     .select('*')
     .order('created_at', { ascending: false })
 
-  if (error) {
-    console.error('Error fetching modules:', error.message)
-    return []
-  }
-  return (data ?? []) as Module[]
+  if (error) throw new Error('Nie udało się pobrać modułów.')
+  return (data ?? []).map(toModule)
 }
 
 /** Pobiera pojedynczy moduł z pełnym flow_data. */
@@ -49,7 +51,7 @@ export async function getModuleById(id: string): Promise<Module | null> {
     if (error.code === 'PGRST116') return null // not found
     throw new Error('Błąd podczas pobierania modułu.')
   }
-  return data as Module
+  return toModule(data)
 }
 
 /** Tworzy nowy moduł ze statusem draft. */
@@ -73,7 +75,7 @@ export async function createModule(title: string, description?: string): Promise
     .single()
 
   if (error) throw error
-  return data as Module
+  return toModule(data)
 }
 
 /** Aktualizuje metadane modułu (tytuł, opis). Tylko draft. */
@@ -95,7 +97,7 @@ export async function updateModule(
   if (error) throw error
 }
 
-/** Usuwa moduł. Tylko draft (RPC nie pozwoli na inne statusy). */
+/** Usuwa moduł (lista pokazuje przycisk tylko dla draftów). */
 export async function deleteModule(id: string): Promise<void> {
   await assertAdminRole()
 
@@ -108,74 +110,61 @@ export async function deleteModule(id: string): Promise<void> {
 }
 
 // =============================================
-// FLOW (GRAPH) OPERATIONS — RPC
+// FLOW + STATUS — RPC
 // =============================================
 
-/** Atomowy zapis grafu flow_data. Tylko dla modułów w statusie draft.
- * PERFORMANCE NOTE: Przy każdym wywołaniu przesyłany jest cały graf JSONB.
- * MVP-akceptowalne. Przyszła optymalizacja: JSON Patch (zapis różnicowy).
- */
+/** Atomowy zapis listy widoków. Tylko draft. Szkic może mieć niepełną treść,
+ * ale struktura musi być poprawna. */
 export async function saveModuleFlow(
   moduleId: string,
   flowData: ModuleFlowData
 ): Promise<void> {
   await assertAdminRole()
+  assertValidFlowStructure(flowData)
 
   const { error } = await supabase.rpc('save_module_flow_rpc', {
     p_module_id: moduleId,
     p_flow_data: flowData,
   })
 
-  if (error) {
-    console.error('Error saving module flow:', error)
-    throw new Error(error.message ?? 'Nie udało się zapisać grafu modułu.')
-  }
+  if (error) throw new Error(error.message ?? 'Nie udało się zapisać modułu.')
 }
 
-/** Atomowa publikacja modułu: draft → published, poprzedni published → archived. */
-export async function publishModule(moduleId: string): Promise<void> {
+/** Publikacja: draft → published. Nie wpływa na inne moduły.
+ * Wymaga kompletnej treści wszystkich widoków. */
+export async function publishModule(moduleId: string, flowData: ModuleFlowData): Promise<void> {
+  await assertAdminRole()
+  assertValidFlowStructure(flowData)
+
+  if (flowData.views.length === 0) {
+    throw new Error('Moduł musi mieć co najmniej jeden widok.')
+  }
+  const issues = validateFlowContent(flowData)
+  if (issues.length > 0) {
+    const views = issues.map(i => `#${i.viewIndex + 1}`).join(', ')
+    throw new Error(`Uzupełnij widoki: ${views}.`)
+  }
+
+  const { error } = await supabase.rpc('publish_module_rpc', { p_module_id: moduleId })
+  if (error) throw new Error(error.message ?? 'Nie udało się opublikować modułu.')
+}
+
+async function setModuleStatus(moduleId: string, status: 'draft' | 'archived'): Promise<void> {
   await assertAdminRole()
 
-  const { error } = await supabase.rpc('publish_module_rpc', {
+  const { error } = await supabase.rpc('set_module_status_rpc', {
     p_module_id: moduleId,
+    p_status: status,
   })
-
-  if (error) {
-    console.error('Error publishing module:', error)
-    throw new Error(error.message ?? 'Nie udało się opublikować modułu.')
-  }
+  if (error) throw new Error(error.message ?? 'Nie udało się zmienić statusu modułu.')
 }
 
-// =============================================
-// DRAFT MANAGEMENT (localStorage)
-// =============================================
-
-const MODULE_DRAFT_KEY_PREFIX = 'relme_module_draft_'
-
-function getDraftKey(moduleId: string): string {
-  return `${MODULE_DRAFT_KEY_PREFIX}${moduleId}`
+/** Wycofanie publikacji: published → draft (moduł znika u użytkowników, można edytować). */
+export function unpublishModule(moduleId: string): Promise<void> {
+  return setModuleStatus(moduleId, 'draft')
 }
 
-export function saveModuleDraftToLocal(moduleId: string, flowData: ModuleFlowData): void {
-  const draft = {
-    moduleId,
-    flowData,
-    lastModified: new Date().toISOString(),
-  }
-  localStorage.setItem(getDraftKey(moduleId), JSON.stringify(draft))
-}
-
-export function loadModuleDraftFromLocal(moduleId: string): ModuleFlowData | null {
-  const data = localStorage.getItem(getDraftKey(moduleId))
-  if (!data) return null
-  try {
-    const parsed = JSON.parse(data)
-    return parsed.flowData ?? null
-  } catch {
-    return null
-  }
-}
-
-export function clearModuleLocalDraft(moduleId: string): void {
-  localStorage.removeItem(getDraftKey(moduleId))
+/** Archiwizacja: draft | published → archived. */
+export function archiveModule(moduleId: string): Promise<void> {
+  return setModuleStatus(moduleId, 'archived')
 }

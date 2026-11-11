@@ -3,7 +3,7 @@ import { Save, Download, Rocket, Trash2, Loader2 } from 'lucide-react'
 import type { QuizVersion, LayoutItem } from '../../../../types/quiz'
 import { getQuizVersions, saveQuizDraft, deleteQuizVersion, publishQuizVersion } from '../../../../api/quiz.api'
 import { countLayoutQuestions } from '../../../../utils/quizTree'
-import { BaseModal } from './BaseModal'
+import { BaseModal } from '../../../../components/ui/popups/BaseModal'
 import { AsyncButton } from '../../../../components/ui/buttons/Button'
 
 type VersionControlModalProps = {

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Search, Check } from 'lucide-react'
 import type { Question } from '../../../../types/quiz'
-import { BaseModal } from './BaseModal'
+import { BaseModal } from '../../../../components/ui/popups/BaseModal'
 import { AsyncButton } from '../../../../components/ui/buttons/Button'
 
 type QuestionPickerModalProps = {

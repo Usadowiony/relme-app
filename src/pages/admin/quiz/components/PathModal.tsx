@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Plus } from 'lucide-react'
-import { BaseModal } from './BaseModal'
+import { BaseModal } from '../../../../components/ui/popups/BaseModal'
 import { AsyncButton } from '../../../../components/ui/buttons/Button'
 
 type PathModalProps = {

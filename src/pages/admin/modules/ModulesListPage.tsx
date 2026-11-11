@@ -155,7 +155,7 @@ export function ModulesListPage() {
         <div className="flex flex-col gap-4">
           {modules.map((mod) => {
             const statusInfo = statusLabels[mod.status] ?? statusLabels.draft
-            const nodeCount = mod.flow_data?.nodes?.length ?? 0
+            const viewCount = mod.flow_data.views.length
 
             return (
               <div
@@ -175,7 +175,7 @@ export function ModulesListPage() {
                     <p className="text-sm text-dark/60 truncate">{mod.description}</p>
                   )}
                   <p className="text-xs text-dark/40 mt-1">
-                    {nodeCount} {nodeCount === 1 ? 'blok' : nodeCount < 5 ? 'bloki' : 'bloków'}
+                    {viewCount} {viewCount === 1 ? 'widok' : viewCount > 1 && viewCount < 5 ? 'widoki' : 'widoków'}
                     {' · '}
                     {new Date(mod.updated_at).toLocaleDateString('pl-PL', {
                       day: 'numeric', month: 'short', year: 'numeric',

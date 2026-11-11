@@ -91,7 +91,10 @@ export function Sidebar({ role, profile, currentPath = '/dashboard' }: SidebarPr
       <div className="flex-1 overflow-y-auto w-full">
         <nav className="flex flex-col gap-1 4xl:gap-2">
           {visibleNavItems.map((item) => {
-            const isActive = currentPath === item.path || (currentPath === '/' && item.path === '/dashboard')
+            const isActive =
+              currentPath === item.path ||
+              currentPath.startsWith(`${item.path}/`) ||
+              (currentPath === '/' && item.path === '/dashboard')
             return (
               <button
                 key={item.label}
