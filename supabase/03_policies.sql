@@ -3,7 +3,7 @@
 -- =============================================================================
 -- Run after 01_schema.sql and 02_functions.sql (policies call has_role()).
 -- RULE: update in place whenever a policy changes in the live DB.
--- Last synced with live DB: 2026-11-08 (T5.1b)
+-- Last synced with live DB: 2026-11-11 (T5.2)
 -- =============================================================================
 
 -- ---------- answer_tags ----------
@@ -40,6 +40,11 @@ CREATE POLICY "media_assets_update_admin" ON public.media_assets AS PERMISSIVE F
 CREATE POLICY "media_assets_delete_admin" ON public.media_assets AS PERMISSIVE FOR DELETE TO authenticated
   USING (has_role('admin'::app_role));
 
+-- ---------- module_drafts ----------
+-- Admins read; writes only through save_module_draft_rpc / modules_create_draft trigger.
+CREATE POLICY "module_drafts_admin_select" ON public.module_drafts AS PERMISSIVE FOR SELECT TO public
+  USING (has_role('admin'::app_role));
+
 -- ---------- module_progress ----------
 CREATE POLICY "module_progress_admin_select" ON public.module_progress AS PERMISSIVE FOR SELECT TO public
   USING (has_role('admin'::app_role));
@@ -51,12 +56,24 @@ CREATE POLICY "module_progress_owner_update" ON public.module_progress AS PERMIS
   USING ((user_id = auth.uid()))
   WITH CHECK ((user_id = auth.uid()));
 
+-- ---------- module_versions ----------
+-- Admins read; writes only through RPCs. Users read the live version and any
+-- version they have progress on (to finish an older version).
+CREATE POLICY "module_versions_admin_select" ON public.module_versions AS PERMISSIVE FOR SELECT TO public
+  USING (has_role('admin'::app_role));
+CREATE POLICY "module_versions_user_select" ON public.module_versions AS PERMISSIVE FOR SELECT TO public
+  USING (((auth.uid() IS NOT NULL) AND ((EXISTS ( SELECT 1
+   FROM modules m
+  WHERE (m.live_version_id = module_versions.id))) OR (EXISTS ( SELECT 1
+   FROM module_progress p
+  WHERE ((p.module_version_id = module_versions.id) AND (p.user_id = auth.uid())))))));
+
 -- ---------- modules ----------
 CREATE POLICY "modules_admin_all" ON public.modules AS PERMISSIVE FOR ALL TO public
   USING (has_role('admin'::app_role))
   WITH CHECK (has_role('admin'::app_role));
-CREATE POLICY "modules_select_published" ON public.modules AS PERMISSIVE FOR SELECT TO public
-  USING (((auth.uid() IS NOT NULL) AND (status = 'published'::text)));
+CREATE POLICY "modules_select_live" ON public.modules AS PERMISSIVE FOR SELECT TO public
+  USING (((auth.uid() IS NOT NULL) AND (live_version_id IS NOT NULL)));
 
 -- ---------- profiles ----------
 CREATE POLICY "profiles_select_own" ON public.profiles AS PERMISSIVE FOR SELECT TO authenticated

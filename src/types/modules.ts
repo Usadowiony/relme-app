@@ -114,21 +114,47 @@ export type ModuleFlowData = {
   views: ModuleView[]
 }
 
-// --- Module Record (from DB) ---
-
-export type ModuleStatus = 'draft' | 'published' | 'archived'
+// ============================================================
+// RECORDS (DB) — versioning model (T5.2)
+// ============================================================
+// modules         : metadata + pointer to the LIVE version (what users get)
+// module_drafts   : the admin's working copy (autosaved, `revision` = optimistic lock)
+// module_versions : named, immutable snapshots; a version that was ever
+//                   published can never be deleted. A published module never
+//                   disappears — its live version can only be replaced.
 
 export type Module = {
   id: string
   title: string
   description: string | null
   cover_media_id: string | null
-  status: ModuleStatus
-  flow_data: ModuleFlowData
+  live_version_id: string | null // null = never published
   created_by: string | null
   created_at: string
   updated_at: string
 }
+
+export type ModuleDraft = {
+  module_id: string
+  flow_data: ModuleFlowData
+  revision: number
+  updated_by: string | null
+  updated_at: string
+}
+
+export type ModuleVersion = {
+  id: string
+  module_id: string
+  version_number: number // v1, v2, … per module
+  name: string
+  flow_data: ModuleFlowData
+  created_by: string | null
+  created_at: string
+  published_at: string | null // first publication; set = "was live at least once"
+}
+
+/** Derived: live = module's live pointer; archived = was live before; saved = never published. */
+export type ModuleVersionStatus = 'saved' | 'live' | 'archived'
 
 // --- Module Progress (user state) ---
 
@@ -136,9 +162,22 @@ export type ModuleProgress = {
   id: string
   user_id: string
   module_id: string
+  module_version_id: string // version the user goes through (kept when a newer one is published)
   current_node_id: string // id of the current view
   completed_at: string | null
   collected_tags: Record<string, number>
   created_at: string
   updated_at: string
+}
+
+// --- Admin views (API results) ---
+
+export type ModuleListItem = Module & {
+  draft_view_count: number
+  live_version: Pick<ModuleVersion, 'id' | 'version_number' | 'name'> | null
+}
+
+export type ModuleEditorData = {
+  module: Module
+  draft: ModuleDraft
 }

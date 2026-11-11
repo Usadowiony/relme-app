@@ -26,5 +26,10 @@ export function useModuleFlow(initial: ModuleFlowData) {
     setFlow(f => ({ ...f, views }))
   }, [])
 
-  return { flow, addView, updateViewConfig, removeView, reorderViews }
+  /** Replaces the whole draft (loading a saved version). */
+  const replaceFlow = useCallback((next: ModuleFlowData) => {
+    setFlow(next)
+  }, [])
+
+  return { flow, addView, updateViewConfig, removeView, reorderViews, replaceFlow }
 }

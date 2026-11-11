@@ -5,7 +5,7 @@
 -- Includes triggers on auth.users (new-user bootstrap) and the DDL event trigger
 -- that auto-enables RLS on new public tables.
 -- RULE: update in place whenever a function/trigger changes in the live DB.
--- Last synced with live DB: 2026-11-08 (T5.1b)
+-- Last synced with live DB: 2026-11-11 (T5.2)
 -- =============================================================================
 
 -- ---------- Role helper (used by all admin policies) ----------
@@ -367,11 +367,64 @@ BEGIN
 END;
 $function$;
 
--- ---------- Module RPCs ----------
--- Modules are independent; flow_data is a linear list of views (schema_version 2).
-CREATE OR REPLACE FUNCTION public.save_module_flow_rpc(p_module_id uuid, p_flow_data jsonb)
- RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
+-- ---------- Module trigger functions (guards, draft bootstrap) ----------
+-- Versions are immutable; published versions can never be deleted.
+CREATE OR REPLACE FUNCTION public.module_versions_guard()
+ RETURNS trigger LANGUAGE plpgsql SET search_path TO 'public'
 AS $function$
+BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    IF NEW.flow_data IS DISTINCT FROM OLD.flow_data
+       OR NEW.name IS DISTINCT FROM OLD.name
+       OR NEW.module_id IS DISTINCT FROM OLD.module_id
+       OR NEW.version_number IS DISTINCT FROM OLD.version_number
+       OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+      RAISE EXCEPTION 'Zapisana wersja modułu nie może być zmieniana.';
+    END IF;
+    IF OLD.published_at IS NOT NULL AND NEW.published_at IS NULL THEN
+      RAISE EXCEPTION 'Nie można cofnąć informacji o publikacji wersji.';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  IF OLD.published_at IS NOT NULL THEN
+    RAISE EXCEPTION 'Nie można usunąć wersji, która była opublikowana.';
+  END IF;
+  RETURN OLD;
+END;
+$function$;
+
+-- A module that was ever published cannot be deleted (users may have used it).
+CREATE OR REPLACE FUNCTION public.modules_delete_guard()
+ RETURNS trigger LANGUAGE plpgsql SET search_path TO 'public'
+AS $function$
+BEGIN
+  IF OLD.live_version_id IS NOT NULL
+     OR EXISTS (SELECT 1 FROM public.module_versions WHERE module_id = OLD.id AND published_at IS NOT NULL) THEN
+    RAISE EXCEPTION 'Nie można usunąć modułu, który był opublikowany.';
+  END IF;
+  RETURN OLD;
+END;
+$function$;
+
+-- Every new module automatically gets an empty draft.
+CREATE OR REPLACE FUNCTION public.modules_create_draft()
+ RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
+AS $function$
+BEGIN
+  INSERT INTO public.module_drafts (module_id, updated_by) VALUES (NEW.id, auth.uid());
+  RETURN NEW;
+END;
+$function$;
+
+-- ---------- Module RPCs (versioning model, T5.2) ----------
+-- Autosave. Fails with SQLSTATE RL409 when the draft changed since the editor
+-- loaded it (other tab / other admin). Returns the new revision.
+CREATE OR REPLACE FUNCTION public.save_module_draft_rpc(p_module_id uuid, p_flow_data jsonb, p_expected_revision integer)
+ RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_revision integer;
 BEGIN
   IF NOT public.has_role('admin') THEN
     RAISE EXCEPTION 'Brak uprawnień administratora.';
@@ -382,94 +435,130 @@ BEGIN
     RAISE EXCEPTION 'Nieprawidłowa struktura modułu.';
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM public.modules WHERE id = p_module_id AND status = 'draft') THEN
-    RAISE EXCEPTION 'Moduł nie istnieje lub nie jest w trybie draft.';
+  UPDATE public.module_drafts
+     SET flow_data = p_flow_data, revision = revision + 1, updated_by = auth.uid(), updated_at = now()
+   WHERE module_id = p_module_id AND revision = p_expected_revision
+  RETURNING revision INTO v_revision;
+
+  IF v_revision IS NULL THEN
+    IF NOT EXISTS (SELECT 1 FROM public.module_drafts WHERE module_id = p_module_id) THEN
+      RAISE EXCEPTION 'Moduł nie istnieje.';
+    END IF;
+    RAISE EXCEPTION 'Szkic modułu został zmieniony w innym oknie lub przez inną osobę.' USING ERRCODE = 'RL409';
   END IF;
 
-  -- Whole flow is written on every call (fine for MVP).
-  UPDATE public.modules SET flow_data = p_flow_data, updated_at = now() WHERE id = p_module_id;
-EXCEPTION WHEN OTHERS THEN
-  RAISE;
+  UPDATE public.modules SET updated_at = now() WHERE id = p_module_id;
+  RETURN v_revision;
 END;
 $function$;
 
-CREATE OR REPLACE FUNCTION public.publish_module_rpc(p_module_id uuid)
- RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
-AS $function$
-BEGIN
-  IF NOT public.has_role('admin') THEN
-    RAISE EXCEPTION 'Brak uprawnień administratora.';
-  END IF;
-
-  IF NOT EXISTS (SELECT 1 FROM public.modules WHERE id = p_module_id AND status = 'draft') THEN
-    RAISE EXCEPTION 'Moduł nie istnieje lub nie jest w trybie draft.';
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1 FROM public.modules
-    WHERE id = p_module_id AND jsonb_array_length(COALESCE(flow_data->'views', '[]'::jsonb)) > 0
-  ) THEN
-    RAISE EXCEPTION 'Moduł musi mieć co najmniej jeden widok.';
-  END IF;
-
-  -- Modules are independent: publishing one does not affect others.
-  UPDATE public.modules SET status = 'published', updated_at = now() WHERE id = p_module_id;
-EXCEPTION WHEN OTHERS THEN
-  RAISE;
-END;
-$function$;
-
-CREATE OR REPLACE FUNCTION public.set_module_status_rpc(p_module_id uuid, p_status text)
- RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
+-- Snapshot of the current draft as a new named version (next number).
+-- p_expected_revision makes sure the snapshot is exactly what the admin sees.
+CREATE OR REPLACE FUNCTION public.create_module_version_rpc(p_module_id uuid, p_name text, p_expected_revision integer)
+ RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
 AS $function$
 DECLARE
-  v_current text;
+  v_draft public.module_drafts%ROWTYPE;
+  v_number integer;
+  v_id uuid;
 BEGIN
   IF NOT public.has_role('admin') THEN
     RAISE EXCEPTION 'Brak uprawnień administratora.';
   END IF;
 
-  SELECT status INTO v_current FROM public.modules WHERE id = p_module_id;
-  IF v_current IS NULL THEN
+  IF p_name IS NULL OR char_length(btrim(p_name)) NOT BETWEEN 1 AND 60 THEN
+    RAISE EXCEPTION 'Nazwa wersji musi mieć od 1 do 60 znaków.';
+  END IF;
+
+  -- Lock the module row so two saves cannot take the same number.
+  PERFORM 1 FROM public.modules WHERE id = p_module_id FOR UPDATE;
+  IF NOT FOUND THEN
     RAISE EXCEPTION 'Moduł nie istnieje.';
   END IF;
 
-  -- Allowed: published -> draft (unpublish to edit), draft|published -> archived.
-  IF NOT (
-    (v_current = 'published' AND p_status = 'draft')
-    OR (v_current IN ('draft', 'published') AND p_status = 'archived')
-  ) THEN
-    RAISE EXCEPTION 'Niedozwolona zmiana statusu: % -> %.', v_current, p_status;
+  SELECT * INTO v_draft FROM public.module_drafts WHERE module_id = p_module_id;
+  IF v_draft.revision IS DISTINCT FROM p_expected_revision THEN
+    RAISE EXCEPTION 'Szkic modułu został zmieniony w innym oknie lub przez inną osobę.' USING ERRCODE = 'RL409';
   END IF;
 
-  UPDATE public.modules SET status = p_status, updated_at = now() WHERE id = p_module_id;
-EXCEPTION WHEN OTHERS THEN
-  RAISE;
+  SELECT COALESCE(MAX(version_number), 0) + 1 INTO v_number
+    FROM public.module_versions WHERE module_id = p_module_id;
+
+  INSERT INTO public.module_versions (module_id, version_number, name, flow_data, created_by)
+  VALUES (p_module_id, v_number, btrim(p_name), v_draft.flow_data, auth.uid())
+  RETURNING id INTO v_id;
+
+  RETURN v_id;
 END;
 $function$;
 
+-- Makes a saved version live (replaces the previous live version, which stays
+-- available to users who are in the middle of it).
+CREATE OR REPLACE FUNCTION public.publish_module_version_rpc(p_version_id uuid)
+ RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_version public.module_versions%ROWTYPE;
+BEGIN
+  IF NOT public.has_role('admin') THEN
+    RAISE EXCEPTION 'Brak uprawnień administratora.';
+  END IF;
+
+  SELECT * INTO v_version FROM public.module_versions WHERE id = p_version_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Wersja nie istnieje.';
+  END IF;
+
+  IF jsonb_array_length(COALESCE(v_version.flow_data->'views', '[]'::jsonb)) = 0 THEN
+    RAISE EXCEPTION 'Nie można opublikować wersji bez widoków.';
+  END IF;
+
+  UPDATE public.module_versions SET published_at = COALESCE(published_at, now()) WHERE id = p_version_id;
+  UPDATE public.modules SET live_version_id = p_version_id, updated_at = now() WHERE id = v_version.module_id;
+END;
+$function$;
+
+-- Removes a version that was never published.
+CREATE OR REPLACE FUNCTION public.delete_module_version_rpc(p_version_id uuid)
+ RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
+AS $function$
+BEGIN
+  IF NOT public.has_role('admin') THEN
+    RAISE EXCEPTION 'Brak uprawnień administratora.';
+  END IF;
+  -- The guard trigger blocks published versions.
+  DELETE FROM public.module_versions WHERE id = p_version_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Wersja nie istnieje.';
+  END IF;
+END;
+$function$;
+
+-- User progress: a new attempt starts on the live version; an attempt in
+-- progress keeps its version even if a newer one is published meanwhile.
+-- (Restarting on the newest version will be handled with the mobile player.)
 CREATE OR REPLACE FUNCTION public.upsert_module_progress_rpc(p_module_id uuid, p_current_node_id text, p_tag_updates jsonb DEFAULT '{}'::jsonb)
  RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
 AS $function$
 DECLARE
-  v_user_id UUID := auth.uid();
+  v_user_id uuid := auth.uid();
+  v_live uuid;
 BEGIN
   IF v_user_id IS NULL THEN
     RAISE EXCEPTION 'Brak zalogowanego użytkownika.';
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM public.modules WHERE id = p_module_id AND status = 'published') THEN
+  SELECT live_version_id INTO v_live FROM public.modules WHERE id = p_module_id;
+  IF v_live IS NULL THEN
     RAISE EXCEPTION 'Moduł nie istnieje lub nie jest opublikowany.';
   END IF;
 
-  INSERT INTO public.module_progress (user_id, module_id, current_node_id, collected_tags)
-  VALUES (v_user_id, p_module_id, p_current_node_id, p_tag_updates)
+  INSERT INTO public.module_progress (user_id, module_id, module_version_id, current_node_id, collected_tags)
+  VALUES (v_user_id, p_module_id, v_live, p_current_node_id, p_tag_updates)
   ON CONFLICT (user_id, module_id) DO UPDATE SET
     current_node_id = EXCLUDED.current_node_id,
     collected_tags = public.module_progress.collected_tags || p_tag_updates,
     updated_at = now();
-EXCEPTION WHEN OTHERS THEN
-  RAISE;
 END;
 $function$;
 
@@ -510,3 +599,6 @@ CREATE TRIGGER set_profiles_updated_at BEFORE UPDATE ON public.profiles FOR EACH
 CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION handle_new_user_profile();
 CREATE TRIGGER on_auth_user_created_assign_role AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION handle_new_user_role();
 CREATE TRIGGER on_auth_user_created_quiz_status AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION handle_new_user_quiz_status();
+CREATE TRIGGER module_versions_guard BEFORE UPDATE OR DELETE ON public.module_versions FOR EACH ROW EXECUTE FUNCTION public.module_versions_guard();
+CREATE TRIGGER modules_delete_guard BEFORE DELETE ON public.modules FOR EACH ROW EXECUTE FUNCTION public.modules_delete_guard();
+CREATE TRIGGER modules_create_draft AFTER INSERT ON public.modules FOR EACH ROW EXECUTE FUNCTION public.modules_create_draft();

@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getModules, createModule, deleteModule } from '../../../api/modules.api'
-import type { Module } from '../../../types/modules'
+import type { ModuleListItem } from '../../../types/modules'
+import { ConfirmDialog } from '../../../components/ui/popups/ConfirmDialog'
 
 export function ModulesListPage() {
   const navigate = useNavigate()
-  const [modules, setModules] = useState<Module[]>([])
+  const [modules, setModules] = useState<ModuleListItem[]>([])
+  const [toDelete, setToDelete] = useState<ModuleListItem | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -51,20 +53,11 @@ export function ModulesListPage() {
     }
   }
 
+  /** Errors are shown inside the confirm dialog. */
   async function handleDelete(id: string) {
-    try {
-      await deleteModule(id)
-      await loadModules()
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Nie udało się usunąć modułu.'
-      setError(message)
-    }
-  }
-
-  const statusLabels: Record<string, { label: string; className: string }> = {
-    draft: { label: 'Draft', className: 'bg-amber-100 text-amber-800' },
-    published: { label: 'Opublikowany', className: 'bg-green-100 text-green-800' },
-    archived: { label: 'Archiwum', className: 'bg-gray-100 text-gray-600' },
+    await deleteModule(id)
+    setToDelete(null)
+    await loadModules()
   }
 
   return (
@@ -154,8 +147,7 @@ export function ModulesListPage() {
       {!isLoading && modules.length > 0 && (
         <div className="flex flex-col gap-4">
           {modules.map((mod) => {
-            const statusInfo = statusLabels[mod.status] ?? statusLabels.draft
-            const viewCount = mod.flow_data.views.length
+            const viewCount = mod.draft_view_count
 
             return (
               <div
@@ -167,15 +159,24 @@ export function ModulesListPage() {
                     <h3 className="text-lg font-manrope font-semibold truncate">
                       {mod.title}
                     </h3>
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${statusInfo.className}`}>
-                      {statusInfo.label}
-                    </span>
+                    {mod.live_version ? (
+                      <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide bg-green-100 text-green-800">
+                        Live · v{mod.live_version.version_number}
+                      </span>
+                    ) : (
+                      <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide bg-amber-100 text-amber-800">
+                        Nieopublikowany
+                      </span>
+                    )}
                   </div>
+                  {mod.live_version && (
+                    <p className="text-xs text-dark/50 truncate">Wersja live: {mod.live_version.name}</p>
+                  )}
                   {mod.description && (
                     <p className="text-sm text-dark/60 truncate">{mod.description}</p>
                   )}
                   <p className="text-xs text-dark/40 mt-1">
-                    {viewCount} {viewCount === 1 ? 'widok' : viewCount > 1 && viewCount < 5 ? 'widoki' : 'widoków'}
+                    Szkic: {viewCount} {viewCount === 1 ? 'widok' : viewCount > 1 && viewCount < 5 ? 'widoki' : 'widoków'}
                     {' · '}
                     {new Date(mod.updated_at).toLocaleDateString('pl-PL', {
                       day: 'numeric', month: 'short', year: 'numeric',
@@ -190,9 +191,10 @@ export function ModulesListPage() {
                   >
                     Edytuj
                   </button>
-                  {mod.status === 'draft' && (
+                  {/* A module that was ever published can never be deleted (DB enforces it too). */}
+                  {!mod.live_version_id && (
                     <button
-                      onClick={() => void handleDelete(mod.id)}
+                      onClick={() => setToDelete(mod)}
                       className="cursor-pointer px-4 py-2.5 rounded-xl bg-red-50 text-red-600 font-manrope font-medium text-sm transition-all hover:bg-red-100 active:scale-[0.98]"
                     >
                       Usuń
@@ -204,6 +206,20 @@ export function ModulesListPage() {
           })}
         </div>
       )}
+
+      <ConfirmDialog
+        open={toDelete !== null}
+        tone="danger"
+        title="Usunąć moduł?"
+        description={<>Moduł <b>„{toDelete?.title}”</b> zostanie trwale usunięty.</>}
+        consequences={[
+          'Usunięty zostanie szkic i wszystkie zapisane wersje tego modułu.',
+          'Tej operacji nie można cofnąć.',
+        ]}
+        confirmLabel="Tak, usuń moduł"
+        onConfirm={() => (toDelete ? handleDelete(toDelete.id) : undefined)}
+        onCancel={() => setToDelete(null)}
+      />
     </div>
   )
 }

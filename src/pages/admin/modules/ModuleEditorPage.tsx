@@ -12,11 +12,13 @@ import {
   Pencil,
   Play,
   Plus,
+  RefreshCw,
   Trash2,
 } from 'lucide-react'
-import type { BlockConfigMap, BlockType, Module, ModuleStatus, ModuleView } from '../../../types/modules'
-import { createDefaultConfig } from '../../../utils/moduleFlow'
+import type { BlockConfigMap, BlockType, ModuleEditorData, ModuleVersion, ModuleView } from '../../../types/modules'
+import { createDefaultConfig, flowsEqual, validateView } from '../../../utils/moduleFlow'
 import { Toast } from '../../../components/ui/popups/Toast'
+import { ConfirmDialog } from '../../../components/ui/popups/ConfirmDialog'
 import { useModuleFlow } from './hooks/useModuleFlow'
 import { useModuleAutosave } from './hooks/useModuleAutosave'
 import type { SaveStatus } from './hooks/useModuleAutosave'
@@ -24,34 +26,37 @@ import { getBlockDefinition } from './blocks/registry'
 import { BlockEditModal } from './components/BlockEditModal'
 import { BlockLibrary, BlockPickerModal } from './components/BlockLibrary'
 import { ModuleVersionModal } from './components/ModuleVersionModal'
+import { useModuleVersions } from './hooks/useModuleVersions'
 
 type EditTarget =
   | { mode: 'new'; type: BlockType }
   | { mode: 'edit'; viewId: string }
 
-const STATUS_BADGE: Record<ModuleStatus, { label: string; className: string }> = {
-  draft: { label: 'Szkic', className: 'bg-amber-100 text-amber-800' },
-  published: { label: 'Opublikowany', className: 'bg-green-100 text-green-800' },
-  archived: { label: 'Archiwum', className: 'bg-gray-100 text-gray-600' },
-}
-
 /** Route element: keyed by module id so state resets between modules. */
 export function ModuleEditorPage() {
-  const module = useLoaderData() as Module
-  return <ModuleEditor key={module.id} module={module} />
+  const data = useLoaderData() as ModuleEditorData
+  return <ModuleEditor key={data.module.id} data={data} />
 }
 
-function ModuleEditor({ module }: { module: Module }) {
-  const [status, setStatus] = useState<ModuleStatus>(module.status)
-  const isEditable = status === 'draft'
+function ModuleEditor({ data }: { data: ModuleEditorData }) {
+  const { module, draft } = data
 
-  const { flow, addView, updateViewConfig, removeView, reorderViews } = useModuleFlow(module.flow_data)
-  const { status: saveStatus, error: saveError, flush } = useModuleAutosave(module.id, flow, isEditable)
+  // The draft is always editable; users only ever see the live version.
+  const { flow, addView, updateViewConfig, removeView, reorderViews, replaceFlow } = useModuleFlow(draft.flow_data)
+  const { status: saveStatus, error: saveError, flush, overwriteRemote, getRevision } = useModuleAutosave(module.id, flow, draft.revision)
+  const versions = useModuleVersions({
+    moduleId: module.id,
+    initialLiveVersionId: module.live_version_id,
+    flushDraft: flush,
+    getRevision,
+  })
+  const draftDiffersFromLive = versions.liveVersion !== null && !flowsEqual(versions.liveVersion.flow_data, flow)
 
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null)
   const [isPickerOpen, setIsPickerOpen] = useState(false)
   const [isVersionOpen, setIsVersionOpen] = useState(false)
   const [dismissedError, setDismissedError] = useState<string | null>(null)
+  const [confirmOverwrite, setConfirmOverwrite] = useState(false)
   const timelineRef = useRef<HTMLUListElement>(null)
 
   const handlePickBlock = (type: BlockType) => {
@@ -78,6 +83,7 @@ function ModuleEditor({ module }: { module: Module }) {
           type={editTarget.type}
           initialConfig={createDefaultConfig(editTarget.type)}
           viewNumber={flow.views.length + 1}
+          isNew
           readOnly={false}
           onSave={handleSaveBlock}
           onClose={() => setEditTarget(null)}
@@ -92,14 +98,15 @@ function ModuleEditor({ module }: { module: Module }) {
         type={view.block_type}
         initialConfig={view.config}
         viewNumber={index + 1}
-        readOnly={!isEditable}
+        isNew={false}
+        readOnly={false}
         onSave={handleSaveBlock}
         onClose={() => setEditTarget(null)}
       />
     )
   })()
 
-  const badge = STATUS_BADGE[status]
+  const isConflict = saveStatus === 'conflict'
 
   return (
     <div className="flex flex-col">
@@ -115,14 +122,18 @@ function ModuleEditor({ module }: { module: Module }) {
           </nav>
           <div className="mt-2 flex items-center gap-3">
             <h1 className="text-3xl font-manrope font-semibold tracking-tight truncate">{module.title}</h1>
-            <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${badge.className}`}>
-              {badge.label}
-            </span>
+            <LiveBadge live={versions.liveVersion} hasLivePointer={versions.liveVersionId !== null} />
           </div>
+          {draftDiffersFromLive && (
+            <p className="mt-1.5 flex items-center gap-1.5 text-[12px] text-[#B26B00]">
+              <span className="size-1.5 rounded-full bg-[#D9822B]" />
+              Szkic różni się od wersji live — użytkownicy widzą v{versions.liveVersion?.version_number}. Zapisz i opublikuj nową wersję w „Kontroli wersji”.
+            </p>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
-          {isEditable && <SaveIndicator status={saveStatus} onRetry={handleRetrySave} />}
+          <SaveIndicator status={saveStatus} onRetry={handleRetrySave} />
           <button
             type="button"
             disabled
@@ -141,11 +152,27 @@ function ModuleEditor({ module }: { module: Module }) {
         </div>
       </div>
 
-      {!isEditable && (
-        <div className="mb-6 rounded-[16px] bg-amber-50 border border-amber-200 px-5 py-4 text-[14px] text-amber-900">
-          {status === 'published'
-            ? 'Moduł jest opublikowany i działa w trybie tylko do odczytu. Aby go edytować, wycofaj publikację w „Kontroli wersji”.'
-            : 'Moduł jest zarchiwizowany i działa w trybie tylko do odczytu.'}
+      {isConflict && (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-[16px] border border-amber-200 bg-amber-50 px-5 py-4 text-[14px] text-amber-900">
+          <span>
+            Ten moduł został zmieniony w innym oknie lub przez inną osobę. Twoje ostatnie zmiany <b>nie zostały zapisane</b>.
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-[13px] font-semibold text-dark shadow-sm hover:bg-neutral cursor-pointer"
+            >
+              <RefreshCw className="size-4" /> Wczytaj aktualny stan
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmOverwrite(true)}
+              className="rounded-full px-4 py-2 text-[13px] font-semibold text-[#A82B3E] hover:bg-red-50 cursor-pointer"
+            >
+              Zachowaj moje zmiany…
+            </button>
+          </div>
         </div>
       )}
 
@@ -164,7 +191,6 @@ function ModuleEditor({ module }: { module: Module }) {
                   key={view.id}
                   view={view}
                   index={index}
-                  isEditable={isEditable}
                   boundsRef={timelineRef}
                   onEdit={() => setEditTarget({ mode: 'edit', viewId: view.id })}
                   onRemove={() => removeView(view.id)}
@@ -173,24 +199,22 @@ function ModuleEditor({ module }: { module: Module }) {
             </Reorder.Group>
           )}
 
-          {isEditable && (
-            <div className="mt-10 flex flex-col items-center">
-              <button
-                type="button"
-                onClick={() => setIsPickerOpen(true)}
-                className="bg-white size-[60px] rounded-full shadow-soft border border-gray/30 flex items-center justify-center cursor-pointer hover:bg-neutral transition-colors"
-                title="Dodaj nowy widok"
-              >
-                <Plus className="size-6 text-dark/70" />
-              </button>
-              <div className="mt-3 text-[11px] font-bold tracking-widest text-dark/50 uppercase">Nowy element</div>
-            </div>
-          )}
+          <div className="mt-10 flex flex-col items-center">
+            <button
+              type="button"
+              onClick={() => setIsPickerOpen(true)}
+              className="bg-white size-[60px] rounded-full shadow-soft border border-gray/30 flex items-center justify-center cursor-pointer hover:bg-neutral transition-colors"
+              title="Dodaj nowy widok"
+            >
+              <Plus className="size-6 text-dark/70" />
+            </button>
+            <div className="mt-3 text-[11px] font-bold tracking-widest text-dark/50 uppercase">Nowy element</div>
+          </div>
         </div>
 
         {/* Library */}
         <div className="xl:sticky xl:top-0">
-          <BlockLibrary disabled={!isEditable} onPick={handlePickBlock} />
+          <BlockLibrary onPick={handlePickBlock} />
         </div>
       </div>
 
@@ -201,11 +225,33 @@ function ModuleEditor({ module }: { module: Module }) {
       <ModuleVersionModal
         isOpen={isVersionOpen}
         onClose={() => setIsVersionOpen(false)}
-        moduleId={module.id}
-        status={status}
-        flow={flow}
-        flushPendingChanges={flush}
-        onStatusChange={setStatus}
+        draftFlow={flow}
+        versions={versions.versions}
+        liveVersion={versions.liveVersion}
+        isLoading={versions.isLoading}
+        loadError={versions.loadError}
+        statusOf={versions.statusOf}
+        onSaveVersion={versions.saveVersion}
+        onLoadVersion={v => replaceFlow(v.flow_data)}
+        onPublish={versions.publish}
+        onDelete={versions.remove}
+      />
+
+      <ConfirmDialog
+        open={confirmOverwrite}
+        tone="danger"
+        title="Zachować Twoje zmiany?"
+        description="Szkic tego modułu został w międzyczasie zapisany w innym oknie lub przez inną osobę. Możesz nadpisać go tym, co widzisz teraz na ekranie."
+        consequences={[
+          'Zmiany zapisane w innym oknie lub przez inną osobę zostaną utracone.',
+          'Zapisane wersje modułu i wersja live się nie zmienią.',
+        ]}
+        confirmLabel="Tak, nadpisz szkic"
+        onConfirm={async () => {
+          await overwriteRemote()
+          setConfirmOverwrite(false)
+        }}
+        onCancel={() => setConfirmOverwrite(false)}
       />
 
       <Toast
@@ -219,27 +265,37 @@ function ModuleEditor({ module }: { module: Module }) {
   )
 }
 
+function LiveBadge({ live, hasLivePointer }: { live: ModuleVersion | null; hasLivePointer: boolean }) {
+  return hasLivePointer ? (
+    <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide bg-green-100 text-green-800">
+      Live{live ? ` · v${live.version_number}` : ''}
+    </span>
+  ) : (
+    <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide bg-amber-100 text-amber-800">Nieopublikowany</span>
+  )
+}
+
 // --- View card in the timeline ---
 
 type ViewItemProps = {
   view: ModuleView
   index: number
-  isEditable: boolean
   boundsRef: RefObject<HTMLElement | null>
   onEdit: () => void
   onRemove: () => void
 }
 
-function ViewItem({ view, index, isEditable, boundsRef, onEdit, onRemove }: ViewItemProps) {
+function ViewItem({ view, index, boundsRef, onEdit, onRemove }: ViewItemProps) {
   const controls = useDragControls()
   const [confirmDelete, setConfirmDelete] = useState(false)
   const def = getBlockDefinition(view.block_type)
   const Icon = def.icon
   const Summary = def.Summary
+  const missing = Object.keys(validateView(view)).length
 
   // The whole card is the drag handle; buttons inside keep working as clicks.
   const handlePointerDown = (e: PointerEvent<HTMLDivElement>) => {
-    if (!isEditable || confirmDelete || e.button !== 0) return
+    if (confirmDelete || e.button !== 0) return
     if ((e.target as HTMLElement).closest('button, a, input, textarea')) return
     e.preventDefault() // no text selection while dragging
     controls.start(e)
@@ -262,47 +318,53 @@ function ViewItem({ view, index, isEditable, boundsRef, onEdit, onRemove }: View
 
       <div
         onPointerDown={handlePointerDown}
-        title={isEditable ? 'Przeciągnij, aby zmienić kolejność' : undefined}
+        title="Przeciągnij, aby zmienić kolejność"
         className={`mx-auto w-full max-w-[460px] mb-8 rounded-[20px] bg-white p-3 shadow-soft border-2 select-none ${
-          isEditable && !confirmDelete ? 'cursor-grab active:cursor-grabbing' : ''
+          confirmDelete ? '' : 'cursor-grab active:cursor-grabbing'
         }`}
         style={{ borderColor: `${def.color}66` }}
       >
         <div className="flex items-center justify-between rounded-[14px] border border-gray/40 px-3 py-2.5">
-          <div className="flex items-center gap-3">
-            {isEditable && <GripVertical className="size-4 -mr-1 text-dark/30" />}
-            <div className="size-9 rounded-[10px] flex items-center justify-center" style={{ backgroundColor: `${def.color}1A`, color: def.color }}>
+          <div className="flex items-center gap-3 min-w-0">
+            <GripVertical className="size-4 -mr-1 shrink-0 text-dark/30" />
+            <div className="size-9 shrink-0 rounded-[10px] flex items-center justify-center" style={{ backgroundColor: `${def.color}1A`, color: def.color }}>
               <Icon className="size-[18px]" />
             </div>
-            <span className="text-[13px] font-semibold tracking-wider" style={{ color: def.color }}>{def.label}</span>
+            <span className="truncate text-[13px] font-semibold tracking-wider" style={{ color: def.color }}>{def.label}</span>
+            {missing > 0 && (
+              <span
+                title={`Blok niekompletny — ${missing} ${missing === 1 ? 'pole' : missing < 5 ? 'pola' : 'pól'} do uzupełnienia. Nie da się opublikować wersji z tym blokiem.`}
+                className="flex shrink-0 items-center text-[#D9822B]"
+              >
+                <CircleAlert className="size-4" />
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-1">
             <button
               type="button"
-              title={isEditable ? 'Edytuj blok' : 'Podgląd bloku'}
+              title="Edytuj blok"
               onClick={onEdit}
               className="size-8 rounded-full flex items-center justify-center text-dark/60 hover:bg-neutral cursor-pointer"
             >
               <Pencil className="size-4" />
             </button>
-            {isEditable && (
-              <button
-                type="button"
-                title="Usuń widok"
-                onClick={() => setConfirmDelete(true)}
-                className="size-8 rounded-full flex items-center justify-center text-[#D15F5F] hover:bg-red-50 cursor-pointer"
-              >
-                <Trash2 className="size-4" />
-              </button>
-            )}
+            <button
+              type="button"
+              title="Usuń widok"
+              onClick={() => setConfirmDelete(true)}
+              className="size-8 rounded-full flex items-center justify-center text-[#D15F5F] hover:bg-red-50 cursor-pointer"
+            >
+              <Trash2 className="size-4" />
+            </button>
           </div>
         </div>
 
         <div className="px-2 pt-3 pb-1">
           {confirmDelete ? (
             <div className="flex items-center justify-between gap-3 text-[13px]">
-              <span className="text-dark/80">Usunąć ten widok?</span>
+              <span className="text-dark/80">Usunąć ten widok ze szkicu?</span>
               <div className="flex gap-2">
                 <button type="button" onClick={() => setConfirmDelete(false)} className="px-3 py-1.5 rounded-full hover:bg-neutral cursor-pointer">
                   Anuluj
@@ -324,6 +386,13 @@ function ViewItem({ view, index, isEditable, boundsRef, onEdit, onRemove }: View
 // --- Save status ---
 
 function SaveIndicator({ status, onRetry }: { status: SaveStatus; onRetry: () => void }) {
+  if (status === 'conflict') {
+    return (
+      <span className="flex items-center gap-1.5 text-[12px] font-medium text-[#B26B00]">
+        <CircleAlert className="size-4" /> Konflikt — zmiany niezapisane
+      </span>
+    )
+  }
   if (status === 'error') {
     return (
       <button type="button" onClick={onRetry} className="flex items-center gap-1.5 text-[12px] font-medium text-[#C03448] cursor-pointer hover:underline">
@@ -344,4 +413,3 @@ function SaveIndicator({ status, onRetry }: { status: SaveStatus; onRetry: () =>
     </span>
   )
 }
-

@@ -1,7 +1,7 @@
 import { createBrowserRouter, redirect, Outlet, useNavigation } from 'react-router-dom'
 import type { LoaderFunctionArgs } from 'react-router-dom'
 import { supabase } from './api/supabase'
-import { getModuleById } from './api/modules.api'
+import { getModuleEditorData } from './api/modules.api'
 import { getMyProfile, isProfileOnboardingComplete, getQuizCompleted } from './api/profile.api'
 import { getUserQuizResult } from './api/quiz.api'
 import type { AppRole, Profile } from './types/auth'
@@ -191,9 +191,9 @@ async function adminLoader() {
 async function moduleEditorLoader({ params }: LoaderFunctionArgs) {
   const guard = await adminLoader()
   if (guard instanceof Response) return guard
-  const module = params.moduleId ? await getModuleById(params.moduleId) : null
-  if (!module) return redirect('/admin/modules')
-  return module
+  const data = params.moduleId ? await getModuleEditorData(params.moduleId) : null
+  if (!data) return redirect('/admin/modules')
+  return data
 }
 
 // =============================================
