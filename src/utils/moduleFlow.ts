@@ -13,6 +13,7 @@ import type {
   ModuleFlowData,
   ModuleView,
 } from '../types/modules'
+import { jsonEqual } from './json'
 
 // ============================================================
 // Limits (shared by admin forms, API validation and mobile)
@@ -390,21 +391,9 @@ export function assertValidFlowStructure(flow: ModuleFlowData): void {
   }
 }
 
-/** Key-order independent JSON (jsonb from the DB reorders keys). */
-function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
-  if (value && typeof value === 'object') {
-    const entries = Object.keys(value as Record<string, unknown>)
-      .sort()
-      .map(k => `${JSON.stringify(k)}:${stableStringify((value as Record<string, unknown>)[k])}`)
-    return `{${entries.join(',')}}`
-  }
-  return JSON.stringify(value)
-}
-
 /** True when two flows have identical content (draft vs saved version). */
 export function flowsEqual(a: ModuleFlowData, b: ModuleFlowData): boolean {
-  return a === b || stableStringify(a) === stableStringify(b)
+  return jsonEqual(a, b)
 }
 
 // ============================================================

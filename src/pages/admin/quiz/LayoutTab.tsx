@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import type { Dispatch, SetStateAction } from 'react'
 import { Trash2, Plus, Split, ChevronUp, ChevronDown } from 'lucide-react'
 import type { Question, LayoutItem } from '../../../types/quiz'
 import { QuestionPickerModal } from './components/QuestionPickerModal'
@@ -282,10 +283,12 @@ function QuestionCard({
 // --- MAIN COMPONENT ---
 type LayoutTabProps = {
   questions: Question[]
-  onOpenVersionControl: () => void
+  /** Working layout (owned by the page, autosaved to the DB). */
+  items: LayoutItem[]
+  setItems: Dispatch<SetStateAction<LayoutItem[]>>
 }
 
-export function LayoutTab({ questions }: LayoutTabProps) {
+export function LayoutTab({ questions, items, setItems }: LayoutTabProps) {
   const {
     draft,
     addRootQuestion,
@@ -297,7 +300,7 @@ export function LayoutTab({ questions }: LayoutTabProps) {
     addPath,
     removePathFromNode,
     cleanStaleItems
-  } = useLayoutTree()
+  } = useLayoutTree(items, setItems)
 
   const [isPickerOpen, setIsPickerOpen] = useState(false)
   const [pickerTarget, setPickerTarget] = useState<{ type: 'root' } | { type: 'nested', questionId: string, pathIdx: number } | null>(null)

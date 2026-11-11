@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState } from 'react'
 import { Plus, PlayCircle, History, Tag } from 'lucide-react'
 import { QuestionsTab } from './QuestionsTab'
 import { TagsTab } from './TagsTab'
@@ -6,16 +6,41 @@ import { LayoutTab } from './LayoutTab'
 import { useQuizData } from '../../../hooks/useQuizData'
 import { TagModal } from './components/TagModal'
 import { QuestionModal } from './components/QuestionModal'
-import { VersionControlModal } from './components/VersionControlModal'
-import { createTag, updateTag, deleteTag, saveQuestionWithAnswers, deleteQuestion, loadDraftFromLocal, saveDraftToLocal } from '../../../api/quiz.api'
-import type { Tag as TagType, Question as QuestionType, QuestionPayload, AnswerPayload, QuizVersion } from '../../../types/quiz'
+import { QuizVersionModal } from './components/VersionControlModal'
+import { createTag, updateTag, deleteTag, saveQuestionWithAnswers, deleteQuestion } from '../../../api/quiz.api'
+import type { Tag as TagType, Question as QuestionType, QuestionPayload, AnswerPayload } from '../../../types/quiz'
 import Toast from '../../../components/ui/popups/Toast'
+import { ConfirmDialog } from '../../../components/ui/popups/ConfirmDialog'
+import { DraftConflictNotice, SaveIndicator } from '../../../components/admin/DraftStatus'
+import { REQUIRED_TAG_GROUPS, layoutQuestionIds } from '../../../utils/quizVersion'
+import { useQuizDraft } from './hooks/useQuizDraft'
+import { useDraftContent, useQuizVersions, versionMatchesDraft } from './hooks/useQuizVersions'
 
 type TabType = 'questions' | 'tags' | 'layout'
+
+type PendingDelete =
+  | { kind: 'question'; item: QuestionType }
+  | { kind: 'tag'; item: TagType }
+
+const REQUIRED_SLUGS = new Set(REQUIRED_TAG_GROUPS.flatMap(g => g.slugs))
+
+function short(text: string, max = 60) {
+  const t = text.trim()
+  return t.length > max ? `${t.slice(0, max)}…` : t
+}
 
 export function QuizManagementPage() {
   const [activeTab, setActiveTab] = useState<TabType>('questions')
   const { questions, tags, isLoading, refetch } = useQuizData()
+
+  // Working package = question/tag library + layout draft (DB, autosaved).
+  const draft = useQuizDraft()
+  const versions = useQuizVersions({ flushDraft: draft.flush, getRevision: draft.getRevision })
+  const draftContent = useDraftContent(draft.items, [questions, tags], draft.isLoaded && !isLoading)
+  const live = versions.liveVersion
+  const hasUnpublishedChanges =
+    live !== null && draftContent.isReady && draftContent.content !== null &&
+    !versionMatchesDraft(live, draft.items, draftContent.content)
 
   // Tag Modal State
   const [isTagModalOpen, setIsTagModalOpen] = useState(false)
@@ -26,23 +51,9 @@ export function QuizManagementPage() {
   const [editingQuestion, setEditingQuestion] = useState<QuestionType | null>(null)
 
   const [isVersionControlOpen, setIsVersionControlOpen] = useState(false)
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null)
   const [toastMessage, setToastMessage] = useState('')
-
-  // 5.3 FIX: Avoid re-parsing localStorage JSON on every render.
-  // Counter increments only on 'draftUpdated' events, causing useMemo to recompute.
-  const [draftRevision, setDraftRevision] = useState(0)
-
-  const handleDraftUpdated = useCallback(() => {
-    setDraftRevision(prev => prev + 1)
-  }, [])
-
-  useEffect(() => {
-    window.addEventListener('draftUpdated', handleDraftUpdated)
-    return () => window.removeEventListener('draftUpdated', handleDraftUpdated)
-  }, [handleDraftUpdated])
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const currentDraft = useMemo(() => loadDraftFromLocal(), [draftRevision])
+  const [dismissedImportInfo, setDismissedImportInfo] = useState(false)
 
   const tabLabels: Record<TabType, string> = {
     questions: 'Pytania i odpowiedzi',
@@ -80,15 +91,9 @@ export function QuizManagementPage() {
     }
   }
 
-  const handleDeleteTag = async (id: string) => {
-    if (!window.confirm('Czy na pewno chcesz usunąć to oznaczenie? Zmiany będą nieodwracalne.')) return
-    try {
-      await deleteTag(id)
-      refetch()
-    } catch (err) {
-      console.error('Failed to delete tag', err)
-      setToastMessage('Nie udało się usunąć oznaczenia.')
-    }
+  const handleDeleteTag = (id: string) => {
+    const tag = tags.find(t => t.id === id)
+    if (tag) setPendingDelete({ kind: 'tag', item: tag })
   }
 
   // --- QUESTIONS ACTIONS ---
@@ -109,16 +114,21 @@ export function QuizManagementPage() {
     }
   }
 
-  const handleDeleteQuestion = async (id: string) => {
-    if (!window.confirm('Czy na pewno chcesz usunąć to pytanie i wszystkie jego odpowiedzi?')) return
-    try {
-      await deleteQuestion(id)
-      refetch()
-    } catch (err) {
-      console.error('Failed to delete question', err)
-      setToastMessage('Nie udało się usunąć pytania.')
-    }
+  const handleDeleteQuestion = (id: string) => {
+    const question = questions.find(q => q.id === id)
+    if (question) setPendingDelete({ kind: 'question', item: question })
   }
+
+  /** Errors are shown inside the confirm dialog. */
+  const confirmDelete = async () => {
+    if (!pendingDelete) return
+    if (pendingDelete.kind === 'question') await deleteQuestion(pendingDelete.item.id)
+    else await deleteTag(pendingDelete.item.id)
+    setPendingDelete(null)
+    refetch()
+  }
+
+  const inDraftLayout = pendingDelete?.kind === 'question' && layoutQuestionIds(draft.items).includes(pendingDelete.item.id)
 
   return (
     <>
@@ -131,6 +141,15 @@ export function QuizManagementPage() {
         durationMs={5000}
         onClose={() => setToastMessage('')}
       />
+      <Toast
+        open={draft.importedFromBrowser && !dismissedImportInfo}
+        type="success"
+        title="Przeniesiono szkic układu"
+        message="Twój dotychczasowy szkic układu z tej przeglądarki został zapisany w bazie. Od teraz układ zapisuje się automatycznie."
+        position="top"
+        durationMs={8000}
+        onClose={() => setDismissedImportInfo(true)}
+      />
       <div className="w-full max-w-[1400px] mx-auto pt-12 px-4 md:px-8">
         {/* Header */}
         <div className="mb-6 flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -140,13 +159,26 @@ export function QuizManagementPage() {
               Panel Admina &gt; Zarządzanie Quizem &gt; {tabLabels[activeTab]}
             </div>
 
-            <h1 className="text-[36px] xl:text-[42px] font-bold text-dark font-manrope">
-              {tabLabels[activeTab]}
-            </h1>
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-[36px] xl:text-[42px] font-bold text-dark font-manrope">
+                {tabLabels[activeTab]}
+              </h1>
+              {live ? (
+                <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide bg-green-100 text-green-800">
+                  Live · v{live.version_number}
+                </span>
+              ) : !versions.isLoading && (
+                <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide bg-amber-100 text-amber-800">
+                  Nieopublikowany
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-4 xl:gap-6">
+          <div className="flex flex-wrap items-center gap-4 xl:gap-6">
+            {draft.isLoaded && <SaveIndicator status={draft.status} onRetry={() => void draft.flush().catch(() => undefined)} />}
+
             {activeTab === 'questions' && (
               <button
                 onClick={() => handleOpenQuestionModal()}
@@ -167,26 +199,39 @@ export function QuizManagementPage() {
               </button>
             )}
 
+            <button
+              onClick={() => setIsVersionControlOpen(true)}
+              className="bg-secondary-2 hover:bg-secondary-2/90 text-white px-6 py-3 rounded-full font-medium text-[14px] xl:text-[15px] transition-colors flex items-center gap-2 shadow-sm cursor-pointer"
+            >
+              <History className="size-4 xl:size-4.5" />
+              Kontrola wersji
+            </button>
+
             {activeTab === 'layout' && (
-              <>
-                <button
-                  onClick={() => setIsVersionControlOpen(true)}
-                  className="bg-secondary-2 hover:bg-secondary-2/90 text-white px-6 py-3 rounded-full font-medium text-[14px] xl:text-[15px] transition-colors flex items-center gap-2 shadow-sm cursor-pointer"
-                >
-                  <History className="size-4 xl:size-4.5" />
-                  Kontrola wersji
-                </button>
-                <button 
-                  onClick={() => window.open('/quiz', '_blank')}
-                  className="bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-full font-medium text-[14px] xl:text-[15px] transition-colors flex items-center gap-2 shadow-sm cursor-pointer"
-                >
-                  <PlayCircle className="size-4 xl:size-4.5" />
-                  Rozwiąż Quiz
-                </button>
-              </>
+              <button
+                onClick={() => window.open('/quiz', '_blank')}
+                title="Otwiera quiz w wersji live (tak, jak widzą go użytkownicy)"
+                className="bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-full font-medium text-[14px] xl:text-[15px] transition-colors flex items-center gap-2 shadow-sm cursor-pointer"
+              >
+                <PlayCircle className="size-4 xl:size-4.5" />
+                Rozwiąż Quiz
+              </button>
             )}
           </div>
         </div>
+
+        {draft.status === 'conflict' && <DraftConflictNotice subject="Układ quizu" onOverwrite={draft.overwriteRemote} />}
+
+        {draft.loadError && (
+          <div className="mb-6 rounded-[16px] border border-red-200 bg-red-50 px-5 py-4 text-[14px] text-[#7A2533]">{draft.loadError}</div>
+        )}
+
+        {hasUnpublishedChanges && live && (
+          <p className="mb-6 flex items-center gap-2 text-[13px] text-[#B26B00]">
+            <span className="size-1.5 shrink-0 rounded-full bg-[#D9822B]" />
+            Masz zmiany nieopublikowane — użytkownicy widzą v{live.version_number} „{live.name}”. Pytania, oznaczenia i układ trafią do nich dopiero po zapisaniu i opublikowaniu nowej wersji w „Kontroli wersji”.
+          </p>
+        )}
 
         {/* Tabs Navigation */}
         <div className="flex items-center gap-8 xl:gap-12 mb-12">
@@ -207,7 +252,7 @@ export function QuizManagementPage() {
 
         {/* Tab Content */}
         <div className="pb-20 max-w-[1000px] 3xl:max-w-[1200px] mx-auto">
-          {isLoading ? (
+          {isLoading || (activeTab === 'layout' && !draft.isLoaded) ? (
             <div className="flex justify-center items-center mt-12 text-dark/50">
               Ładowanie danych z bazy...
             </div>
@@ -215,7 +260,7 @@ export function QuizManagementPage() {
             <>
               {activeTab === 'questions' && <QuestionsTab questions={questions} onEdit={handleOpenQuestionModal} onDelete={handleDeleteQuestion} />}
               {activeTab === 'tags' && <TagsTab tags={tags} onEdit={handleOpenTagModal} onDelete={handleDeleteTag} onRefresh={refetch} />}
-              {activeTab === 'layout' && <LayoutTab questions={questions} onOpenVersionControl={() => setIsVersionControlOpen(true)} />}
+              {activeTab === 'layout' && <LayoutTab questions={questions} items={draft.items} setItems={draft.setItems} />}
             </>
           )}
         </div>
@@ -234,21 +279,43 @@ export function QuizManagementPage() {
           initialData={editingQuestion}
           availableTags={tags}
         />
-        <VersionControlModal
+        <QuizVersionModal
           isOpen={isVersionControlOpen}
           onClose={() => setIsVersionControlOpen(false)}
-          currentLayoutItems={currentDraft?.items || []}
-          currentDraftName={currentDraft?.name || 'Nowy Draft'}
-          onLoadDraft={(version: QuizVersion) => {
-            saveDraftToLocal({
-              items: version.layout_data,
-              name: version.name,
-              lastModified: new Date().toISOString(),
-              versionId: version.id
-            })
-            window.dispatchEvent(new Event('draftUpdated'))
-          }}
-          onPublished={() => { }}
+          draftItems={draft.items}
+          draftContent={draftContent.content}
+          draftReady={draftContent.isReady && draft.isLoaded}
+          versions={versions.versions}
+          liveVersion={live}
+          isLoading={versions.isLoading}
+          loadError={versions.loadError}
+          onSaveVersion={versions.saveVersion}
+          onLoadVersion={v => draft.setItems(v.layout_data)}
+          onPublish={versions.publish}
+          onDelete={versions.remove}
+        />
+
+        <ConfirmDialog
+          open={pendingDelete !== null}
+          tone="danger"
+          title={pendingDelete?.kind === 'tag' ? 'Usunąć oznaczenie?' : 'Usunąć pytanie?'}
+          description={
+            pendingDelete?.kind === 'tag'
+              ? <>Oznaczenie <b>„{pendingDelete.item.slug}”</b> zostanie usunięte z biblioteki i ze wszystkich odpowiedzi.</>
+              : <>Pytanie <b>„{pendingDelete ? short(pendingDelete.item.content) : ''}”</b> i wszystkie jego odpowiedzi zostaną usunięte z biblioteki.</>
+          }
+          consequences={[
+            'Tej operacji nie można cofnąć.',
+            'Wersja live i zapisane wersje się nie zmienią — użytkownicy nadal widzą dotychczasową treść, dopóki nie opublikujesz nowej wersji.',
+            ...(pendingDelete?.kind === 'tag' ? ['Punktacja tego oznaczenia zniknie ze wszystkich odpowiedzi w bibliotece.'] : []),
+            ...(pendingDelete?.kind === 'tag' && REQUIRED_SLUGS.has(pendingDelete.item.slug)
+              ? ['To oznaczenie jest potrzebne do wyliczenia wyniku quizu — bez niego nie opublikujesz nowej wersji.']
+              : []),
+            ...(inDraftLayout ? ['Pytanie jest użyte w szkicu układu — szkic będzie niekompletny, dopóki nie usuniesz go z układu.'] : []),
+          ]}
+          confirmLabel={pendingDelete?.kind === 'tag' ? 'Tak, usuń oznaczenie' : 'Tak, usuń pytanie'}
+          onConfirm={confirmDelete}
+          onCancel={() => setPendingDelete(null)}
         />
       </div>
     </>

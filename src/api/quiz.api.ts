@@ -7,12 +7,16 @@ import type {
   QuestionPayload,
   AnswerPayload,
   LayoutItem,
-  DraftState,
+  LegacyLocalDraft,
+  QuizContentQuestion,
+  QuizDraft,
   QuizVersion,
+  QuizVersionContent,
   QuizSubmissionPayload
 } from '../types/quiz'
 import { validateTagPayload } from '../utils/validation'
-import { countLayoutQuestions } from '../utils/quizTree'
+import { layoutQuestionIds, validateQuizVersion } from '../utils/quizVersion'
+import { rpcError } from './draftConflict'
 
 // --- Stałe walidacyjne ---
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -224,163 +228,158 @@ export async function deleteQuestion(id: string): Promise<void> {
 }
 
 // =============================================
-// LAYOUT & VERSION CONTROL
+// DRAFT (working layout) — T5.3
+// The question / tag library tables are the working copy of the content;
+// the layout draft lives in quiz_draft (single row, optimistic lock).
 // =============================================
 
-// --- localStorage Draft Management ---
-const DRAFT_STORAGE_KEY = 'relme_quiz_draft_wip'
-
-export function saveDraftToLocal(draft: DraftState): void {
-  localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft))
+export async function getQuizDraft(): Promise<QuizDraft> {
+  const { data, error } = await supabase.from('quiz_draft').select('layout_data, revision, updated_at').single()
+  if (error) throw new Error('Nie udało się pobrać szkicu układu quizu.')
+  return data as QuizDraft
 }
 
-export function loadDraftFromLocal(): DraftState | null {
-  const data = localStorage.getItem(DRAFT_STORAGE_KEY)
-  if (!data) return null
-  try { return JSON.parse(data) } catch { return null }
+/** Saves the working layout if the DB still has `expectedRevision`. Returns the new revision. */
+export async function saveQuizDraft(layout: LayoutItem[], expectedRevision: number): Promise<number> {
+  const { data, error } = await supabase.rpc('save_quiz_draft_rpc', {
+    p_layout: layout,
+    p_expected_revision: expectedRevision,
+  })
+  if (error) throw rpcError(error, 'Nie udało się zapisać układu quizu.')
+  return data as number
 }
 
-export function clearLocalDraft(): void {
-  localStorage.removeItem(DRAFT_STORAGE_KEY)
+// --- Legacy browser draft (before T5.3 the layout draft lived in localStorage) ---
+const LEGACY_DRAFT_KEY = 'relme_quiz_draft_wip'
+
+/** Reads the old localStorage draft (imported once into the DB, then left as a backup). */
+export function readLegacyLocalDraft(): LegacyLocalDraft | null {
+  try {
+    const data = localStorage.getItem(LEGACY_DRAFT_KEY)
+    if (!data) return null
+    const parsed = JSON.parse(data) as LegacyLocalDraft
+    return Array.isArray(parsed?.items) ? parsed : null
+  } catch {
+    return null
+  }
 }
 
-// --- Quiz Versions API ---
+// =============================================
+// VERSIONS — one frozen package (layout + questions + answers + tag points)
+// =============================================
+
+/** Builds the package for a layout from the current library (same function the DB uses when saving). */
+export async function buildQuizContent(layout: LayoutItem[]): Promise<QuizVersionContent> {
+  const { data, error } = await supabase.rpc('build_quiz_version_content', { p_layout: layout })
+  if (error) throw new Error('Nie udało się porównać szkicu z wersjami.')
+  return data as QuizVersionContent
+}
+
 export async function getQuizVersions(): Promise<QuizVersion[]> {
   const { data, error } = await supabase
     .from('quiz_versions')
     .select('*')
-    .order('created_at', { ascending: false })
+    .order('version_number', { ascending: false })
 
-  if (error) {
-    console.error('Error fetching quiz versions:', error.message)
-    return []
+  if (error) throw new Error('Nie udało się pobrać wersji quizu.')
+  return (data ?? []) as QuizVersion[]
+}
+
+/**
+ * Saves the whole package (current draft layout + library content) as a new,
+ * named version. The content is built on the server.
+ */
+export async function createQuizVersion(name: string, expectedRevision: number): Promise<string> {
+  const trimmed = name.trim()
+  if (trimmed.length === 0 || trimmed.length > 50) {
+    throw new Error('Nazwa wersji musi mieć od 1 do 50 znaków.')
   }
-  return data || []
+  const { data, error } = await supabase.rpc('create_quiz_version_rpc', {
+    p_name: trimmed,
+    p_expected_revision: expectedRevision,
+  })
+  if (error) throw rpcError(error, 'Nie udało się zapisać wersji quizu.')
+  return data as string
 }
 
-export async function saveQuizDraft(name: string, layoutData: LayoutItem[]): Promise<QuizVersion> {
-  await assertAdminRole()
-
-  if (!name || name.trim().length === 0) {
-    throw new Error('Nazwa draftu nie może być pusta.')
+/** Publishes a version (the previous live one becomes archived). Requires a complete package. */
+export async function publishQuizVersion(version: QuizVersion): Promise<void> {
+  const issues = validateQuizVersion(version.layout_data, version.content)
+  if (issues.length > 0) {
+    throw new Error(`Wersja jest niekompletna: ${issues[0]}`)
   }
-
-  const { data: { user } } = await supabase.auth.getUser()
-
-  const { data, error } = await supabase
-    .from('quiz_versions')
-    .insert({
-      name: name.trim(),
-      status: 'draft',
-      layout_data: layoutData,
-      question_count: countLayoutQuestions(layoutData),
-      created_by: user?.id || null
-    })
-    .select()
-    .single()
-
-  if (error) throw error
-  return data
+  const { error } = await supabase.rpc('publish_quiz_version_rpc', { target_version_id: version.id })
+  if (error) throw rpcError(error, 'Nie udało się opublikować wersji quizu.')
 }
 
-export async function updateQuizDraft(id: string, name: string, layoutData: LayoutItem[]): Promise<void> {
-  await assertAdminRole()
-
-  const { error } = await supabase
-    .from('quiz_versions')
-    .update({
-      name: name.trim(),
-      layout_data: layoutData,
-      question_count: countLayoutQuestions(layoutData)
-    })
-    .eq('id', id)
-
-  if (error) throw error
-}
-
+/** Deletes a version that was never published and has no results (the DB blocks the rest). */
 export async function deleteQuizVersion(id: string): Promise<void> {
-  await assertAdminRole()
-
-  const { error } = await supabase
-    .from('quiz_versions')
-    .delete()
-    .eq('id', id)
-
-  if (error) throw error
-}
-
-export async function publishQuizVersion(id: string): Promise<void> {
-  await assertAdminRole()
-
-  try {
-    const { error } = await supabase.rpc('publish_quiz_version_rpc', { target_version_id: id })
-    if (error) throw error
-  } catch (error: unknown) {
-    console.error('Error publishing quiz version:', error)
-    const message = error instanceof Error ? error.message : 'Nie udało się opublikować wersji quizu. Spróbuj ponownie.'
-    throw new Error(message)
-  }
+  const { error } = await supabase.rpc('delete_quiz_version_rpc', { p_version_id: id })
+  if (error) throw rpcError(error, 'Nie udało się usunąć wersji quizu.')
 }
 
 // =============================================
 // QUIZ PLAYER (FRONTEND API)
 // =============================================
 
+/**
+ * The live version with its questions taken from the FROZEN package, so
+ * editing the library never changes what users see until a new publication.
+ * Questions are returned in layout order (used for image preloading).
+ */
 export async function getLiveQuiz(): Promise<{ version: QuizVersion, questions: Question[] }> {
-  // 1. Pobierz aktywną wersję
-  const { data: versionData, error: versionError } = await supabase
+  const { data, error } = await supabase
     .from('quiz_versions')
     .select('*')
     .eq('status', 'live')
     .single()
 
-  if (versionError || !versionData) {
+  if (error || !data) {
     throw new Error('Brak opublikowanej wersji quizu.')
   }
 
-  const version = versionData as QuizVersion
+  const version = data as QuizVersion
+  const ordered = layoutQuestionIds(version.layout_data)
+  const questions = ordered
+    .map(id => version.content.questions[id])
+    .filter((q): q is QuizContentQuestion => q !== undefined)
+    .map(contentToQuestion)
 
-  // Pobierz wszystkie ID pytań użytych w układzie
-  const questionIds: string[] = []
-  function traverse(items: LayoutItem[]) {
-    for (const item of items) {
-      if (!questionIds.includes(item.question_id)) {
-        questionIds.push(item.question_id)
-      }
-      for (const path of item.paths) {
-        traverse(path.children)
-      }
-    }
-  }
-  traverse(version.layout_data)
-
-  if (questionIds.length === 0) {
-    return { version, questions: [] }
-  }
-
-  // 2. Pobierz powiązane pytania (z JOIN na odpowiedzi, tagi, obrazki)
-  const { data: questionsData, error: questionsError } = await supabase
-    .from('questions')
-    .select(`
-      *,
-      media_assets ( file_url ),
-      answers!answers_question_id_fkey (
-        *,
-        answer_tags (
-          *,
-          tags (*)
-        )
-      )
-    `)
-    .in('id', questionIds)
-
-  if (questionsError) {
-    throw new Error('Błąd podczas pobierania pytań z bazy.')
-  }
-
-  return { version, questions: (questionsData || []) as Question[] }
+  return { version, questions }
 }
 
+/** Maps a frozen question to the shape the player components already use. */
+function contentToQuestion(q: QuizContentQuestion): Question {
+  return {
+    id: q.id,
+    content: q.content,
+    question_type: q.question_type,
+    media_id: null,
+    path_id: null,
+    created_at: '',
+    media_assets: q.media_url ? { file_url: q.media_url } : null,
+    answers: q.answers.map(a => ({
+      id: a.id,
+      question_id: q.id,
+      content: a.content,
+      target_path_id: null,
+      next_question_id: null,
+      created_at: '',
+      answer_tags: a.tags.map(t => ({
+        answer_id: a.id,
+        tag_id: t.tag_id,
+        points: t.points,
+        created_at: '',
+        tags: { id: t.tag_id, slug: t.tag_slug, color: null, is_scored: t.is_scored, created_at: '' },
+      })),
+    })),
+  }
+}
+
+/**
+ * Sends the user's answers. The server validates them against the frozen
+ * version and computes the result itself — the client snapshot is ignored.
+ */
 export async function submitQuizResult(payload: QuizSubmissionPayload): Promise<void> {
   // --- Guard Clauses (walidacja strukturalna) ---
   if (!payload.version_id || !UUID_REGEX.test(payload.version_id)) {
@@ -411,12 +410,15 @@ export async function submitQuizResult(payload: QuizSubmissionPayload): Promise<
     throw new Error('Nie udało się zapisać wyniku quizu. Spróbuj ponownie.')
   }
 }
-//Do zapamiętania do zrobienia w przyszłości!
-//QuizResultPage renderuje surowy JSON z bazy
-//any na granicy API otwiera drzwi do XSS jeśli computed_result trafi do dangerouslySetInnerHTML lub niekontrolowanego renderowania. Typ powinien być zdefiniowany.
-//QuizResultPage renderuje surowy JSON z bazy
-//Jeśli computed_result zawiera złośliwe dane z bazy — mogą zostać wyrenderowane. Dopóki jest w <pre> to nie XSS, ale brak sanityzacji + any to ryzyko.
-export async function getUserQuizResult(): Promise<{ computed_result: any, payment_status: string, created_at: string } | null> {
+
+/** Diagnostic result computed on the server (calculate_diagnostic_result). */
+export type DiagnosticResult = {
+  relation_path?: string | null
+  user_style?: string | null
+  partner_style?: string | null
+}
+
+export async function getUserQuizResult(): Promise<{ computed_result: DiagnosticResult, payment_status: string, created_at: string } | null> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Brak zalogowanego użytkownika')
 

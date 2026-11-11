@@ -5,7 +5,7 @@
 -- Includes triggers on auth.users (new-user bootstrap) and the DDL event trigger
 -- that auto-enables RLS on new public tables.
 -- RULE: update in place whenever a function/trigger changes in the live DB.
--- Last synced with live DB: 2026-11-11 (T5.2)
+-- Last synced with live DB: 2026-11-11 (T5.3)
 -- =============================================================================
 
 -- ---------- Role helper (used by all admin policies) ----------
@@ -136,18 +136,222 @@ BEGIN
 END;
 $function$;
 
--- ---------- Quiz RPCs ----------
-CREATE OR REPLACE FUNCTION public.publish_quiz_version_rpc(target_version_id uuid)
- RETURNS void
- LANGUAGE plpgsql
- SECURITY DEFINER
+-- ---------- Quiz versioning (T5.3) ----------
+-- A quiz version is ONE frozen package (layout + questions + answers + tag
+-- points). Library edits reach users only after a new version is published.
+
+-- Builds the package for a layout from the current library:
+-- { questions: { "<id>": { id, content, question_type, media_url,
+--                          answers: [ { id, content, tags: [ { tag_id, tag_slug, points, is_scored } ] } ] } },
+--   tags: [ { id, slug, color, is_scored } ] }
+-- Answers are ordered like in the app (created_at).
+CREATE OR REPLACE FUNCTION public.build_quiz_version_content(p_layout jsonb)
+ RETURNS jsonb LANGUAGE sql STABLE SET search_path TO 'public'
+AS $function$
+  WITH qids AS (
+    SELECT DISTINCT (q #>> '{}')::uuid AS id
+    FROM jsonb_path_query(p_layout, 'lax $.**.question_id') AS q
+  ),
+  ans AS (
+    SELECT a.question_id,
+           jsonb_agg(jsonb_build_object(
+             'id', a.id,
+             'content', a.content,
+             'tags', COALESCE((
+               SELECT jsonb_agg(jsonb_build_object('tag_id', t.id, 'tag_slug', t.slug, 'points', at.points, 'is_scored', t.is_scored) ORDER BY t.slug)
+               FROM public.answer_tags at JOIN public.tags t ON t.id = at.tag_id
+               WHERE at.answer_id = a.id
+             ), '[]'::jsonb)
+           ) ORDER BY a.created_at, a.id) AS answers
+    FROM public.answers a JOIN qids ON qids.id = a.question_id
+    GROUP BY a.question_id
+  ),
+  used_tags AS (
+    SELECT DISTINCT t.id, t.slug, t.color, t.is_scored
+    FROM public.answers a
+    JOIN qids ON qids.id = a.question_id
+    JOIN public.answer_tags at ON at.answer_id = a.id
+    JOIN public.tags t ON t.id = at.tag_id
+  )
+  SELECT jsonb_build_object(
+    'questions', COALESCE((
+      SELECT jsonb_object_agg(q.id::text, jsonb_build_object(
+        'id', q.id,
+        'content', q.content,
+        'question_type', q.question_type::text,
+        'media_url', ma.file_url,
+        'answers', COALESCE(ans.answers, '[]'::jsonb)
+      ))
+      FROM public.questions q
+      JOIN qids ON qids.id = q.id
+      LEFT JOIN public.media_assets ma ON ma.id = q.media_id
+      LEFT JOIN ans ON ans.question_id = q.id
+    ), '{}'::jsonb),
+    'tags', COALESCE((
+      SELECT jsonb_agg(jsonb_build_object('id', id, 'slug', slug, 'color', color, 'is_scored', is_scored) ORDER BY slug)
+      FROM used_tags
+    ), '[]'::jsonb)
+  );
+$function$;
+
+-- Versions are immutable; status moves only draft→live, live→archived, archived→live;
+-- a version that was ever live or has results cannot be deleted.
+CREATE OR REPLACE FUNCTION public.quiz_versions_guard()
+ RETURNS trigger LANGUAGE plpgsql SET search_path TO 'public'
 AS $function$
 BEGIN
-    UPDATE public.quiz_versions SET status = 'archived' WHERE status = 'live';
-    UPDATE public.quiz_versions SET status = 'live', published_at = now() WHERE id = target_version_id;
-EXCEPTION
-    WHEN OTHERS THEN
-        RAISE;
+  IF TG_OP = 'UPDATE' THEN
+    IF NEW.name IS DISTINCT FROM OLD.name
+       OR NEW.layout_data IS DISTINCT FROM OLD.layout_data
+       OR NEW.content IS DISTINCT FROM OLD.content
+       OR NEW.version_number IS DISTINCT FROM OLD.version_number
+       OR NEW.question_count IS DISTINCT FROM OLD.question_count
+       OR NEW.created_at IS DISTINCT FROM OLD.created_at
+       OR NEW.created_by IS DISTINCT FROM OLD.created_by THEN
+      RAISE EXCEPTION 'Zapisana wersja quizu nie może być zmieniana.';
+    END IF;
+    IF NEW.status IS DISTINCT FROM OLD.status AND NOT (
+         (OLD.status = 'draft' AND NEW.status = 'live')
+      OR (OLD.status = 'live' AND NEW.status = 'archived')
+      OR (OLD.status = 'archived' AND NEW.status = 'live')
+    ) THEN
+      RAISE EXCEPTION 'Niedozwolona zmiana statusu wersji: % -> %.', OLD.status, NEW.status;
+    END IF;
+    IF OLD.published_at IS NOT NULL AND NEW.published_at IS NULL THEN
+      RAISE EXCEPTION 'Nie można cofnąć informacji o publikacji wersji.';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  IF OLD.status <> 'draft' OR OLD.published_at IS NOT NULL THEN
+    RAISE EXCEPTION 'Nie można usunąć wersji, która była opublikowana.';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.quiz_submissions WHERE version_id = OLD.id) THEN
+    RAISE EXCEPTION 'Nie można usunąć wersji, do której są zapisane wyniki użytkowników.';
+  END IF;
+  RETURN OLD;
+END;
+$function$;
+
+-- Autosave of the working layout. SQLSTATE RL409 = changed elsewhere meanwhile.
+CREATE OR REPLACE FUNCTION public.save_quiz_draft_rpc(p_layout jsonb, p_expected_revision integer)
+ RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_revision integer;
+BEGIN
+  IF NOT public.has_role('admin') THEN
+    RAISE EXCEPTION 'Brak uprawnień administratora.';
+  END IF;
+  IF jsonb_typeof(p_layout) IS DISTINCT FROM 'array' THEN
+    RAISE EXCEPTION 'Nieprawidłowa struktura układu quizu.';
+  END IF;
+
+  UPDATE public.quiz_draft
+     SET layout_data = p_layout, revision = revision + 1, updated_by = auth.uid(), updated_at = now()
+   WHERE id AND revision = p_expected_revision
+  RETURNING revision INTO v_revision;
+
+  IF v_revision IS NULL THEN
+    RAISE EXCEPTION 'Szkic quizu został zmieniony w innym oknie lub przez inną osobę.' USING ERRCODE = 'RL409';
+  END IF;
+  RETURN v_revision;
+END;
+$function$;
+
+-- Saves the WHOLE package (draft layout + current library content) as a new,
+-- named version. The content is built on the server, never sent by the client.
+CREATE OR REPLACE FUNCTION public.create_quiz_version_rpc(p_name text, p_expected_revision integer)
+ RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_draft public.quiz_draft%ROWTYPE;
+  v_number integer;
+  v_id uuid;
+BEGIN
+  IF NOT public.has_role('admin') THEN
+    RAISE EXCEPTION 'Brak uprawnień administratora.';
+  END IF;
+  IF p_name IS NULL OR char_length(btrim(p_name)) NOT BETWEEN 1 AND 50 THEN
+    RAISE EXCEPTION 'Nazwa wersji musi mieć od 1 do 50 znaków.';
+  END IF;
+
+  -- Locks the draft row: one version save at a time, stable numbering.
+  SELECT * INTO v_draft FROM public.quiz_draft WHERE id FOR UPDATE;
+  IF v_draft.revision IS DISTINCT FROM p_expected_revision THEN
+    RAISE EXCEPTION 'Szkic quizu został zmieniony w innym oknie lub przez inną osobę.' USING ERRCODE = 'RL409';
+  END IF;
+
+  SELECT COALESCE(MAX(version_number), 0) + 1 INTO v_number FROM public.quiz_versions;
+
+  INSERT INTO public.quiz_versions (name, status, layout_data, content, question_count, version_number, created_by)
+  VALUES (
+    btrim(p_name),
+    'draft',
+    v_draft.layout_data,
+    public.build_quiz_version_content(v_draft.layout_data),
+    (SELECT count(*) FROM jsonb_path_query(v_draft.layout_data, 'lax $.**.question_id')),
+    v_number,
+    auth.uid()
+  )
+  RETURNING id INTO v_id;
+
+  RETURN v_id;
+END;
+$function$;
+
+-- Same name/argument as before (compatibility), now admin-checked and guarded.
+-- Makes a saved version live; the previous live version becomes archived.
+-- Full content validation runs in the admin panel; the DB checks that the
+-- package is not empty and contains the tags the result algorithm needs.
+CREATE OR REPLACE FUNCTION public.publish_quiz_version_rpc(target_version_id uuid)
+ RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_version public.quiz_versions%ROWTYPE;
+  v_slugs text[];
+BEGIN
+  IF NOT public.has_role('admin') THEN
+    RAISE EXCEPTION 'Brak uprawnień administratora.';
+  END IF;
+
+  SELECT * INTO v_version FROM public.quiz_versions WHERE id = target_version_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Wersja nie istnieje.';
+  END IF;
+  IF v_version.status = 'live' THEN
+    RAISE EXCEPTION 'Ta wersja jest już opublikowana.';
+  END IF;
+  IF v_version.content->'questions' = '{}'::jsonb THEN
+    RAISE EXCEPTION 'Nie można opublikować wersji bez pytań.';
+  END IF;
+
+  SELECT array_agg(t->>'slug') INTO v_slugs FROM jsonb_array_elements(v_version.content->'tags') t;
+  IF NOT (v_slugs && ARRAY['poznac-siebie', 'poznac-kogos', 'pielegnowac-relacje']
+      AND v_slugs && ARRAY['bezp-styl', 'lek-styl', 'unik-styl']
+      AND v_slugs && ARRAY['part-bezp-styl', 'part-unik-styl', 'part-lek-styl']) THEN
+    RAISE EXCEPTION 'Wersja nie zawiera oznaczeń potrzebnych do wyliczenia wyniku (ścieżka, styl użytkownika, styl partnera).';
+  END IF;
+
+  UPDATE public.quiz_versions SET status = 'archived' WHERE status = 'live';
+  UPDATE public.quiz_versions
+     SET status = 'live', published_at = COALESCE(published_at, now())
+   WHERE id = target_version_id;
+END;
+$function$;
+
+-- Removes a version that was never published and has no results (guard trigger).
+CREATE OR REPLACE FUNCTION public.delete_quiz_version_rpc(p_version_id uuid)
+ RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
+AS $function$
+BEGIN
+  IF NOT public.has_role('admin') THEN
+    RAISE EXCEPTION 'Brak uprawnień administratora.';
+  END IF;
+  DELETE FROM public.quiz_versions WHERE id = p_version_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Wersja nie istnieje.';
+  END IF;
 END;
 $function$;
 
@@ -238,79 +442,115 @@ EXCEPTION
 END;
 $function$;
 
+-- ---------- Quiz result submission ----------
+-- Same signature/payload as before (web + mobile keep working). The client
+-- `snapshot` is IGNORED: the stored snapshot (question, answers, tag points)
+-- is rebuilt from quiz_versions.content, and every selected answer is checked
+-- against that version.
 CREATE OR REPLACE FUNCTION public.submit_quiz_result_rpc(payload jsonb)
- RETURNS uuid
- LANGUAGE plpgsql
- SECURITY DEFINER
+ RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
 AS $function$
 DECLARE
-  v_user_id UUID;
-  v_already_completed BOOLEAN;
-  v_is_admin BOOLEAN;
-  new_submission_id UUID;
-  ans JSONB;
+  v_user_id uuid := auth.uid();
+  v_already_completed boolean;
+  v_version public.quiz_versions%ROWTYPE;
+  v_submission_id uuid;
+  ans jsonb;
+  v_qid uuid;
+  v_question jsonb;
+  v_selected uuid[];
+  v_seen uuid[] := '{}';
 BEGIN
-  v_user_id := auth.uid();
-
   IF v_user_id IS NULL THEN
     RAISE EXCEPTION 'Brak autoryzacji. Użytkownik nie jest zalogowany.';
   END IF;
 
-  -- Role check: admins skip the completion-status check
-  v_is_admin := public.has_role('admin');
-
-  IF NOT v_is_admin THEN
-    -- Read from user_quiz_status (not profiles)
-    SELECT quiz_completed INTO v_already_completed
-    FROM public.user_quiz_status
-    WHERE user_id = v_user_id;
-
+  -- Admins may submit repeatedly (testing); users only once.
+  IF NOT public.has_role('admin') THEN
+    SELECT quiz_completed INTO v_already_completed FROM public.user_quiz_status WHERE user_id = v_user_id;
     IF v_already_completed THEN
       RAISE EXCEPTION 'Użytkownik już ukończył quiz. Nie można wysłać ponownie.';
     END IF;
   END IF;
 
-  INSERT INTO quiz_submissions (user_id, version_id, completed_at, payment_status)
-  VALUES (
-    v_user_id,
-    (payload->>'version_id')::UUID,
-    now(),
-    'unpaid'
-  )
-  RETURNING id INTO new_submission_id;
+  -- Live or previously live (someone may finish a quiz started before a new publication).
+  SELECT * INTO v_version FROM public.quiz_versions
+   WHERE id = (payload->>'version_id')::uuid AND status IN ('live', 'archived');
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Nieprawidłowa lub nieopublikowana wersja quizu.';
+  END IF;
+
+  IF jsonb_typeof(payload->'answers') IS DISTINCT FROM 'array' OR jsonb_array_length(payload->'answers') = 0 THEN
+    RAISE EXCEPTION 'Brak odpowiedzi do zapisania.';
+  END IF;
+
+  INSERT INTO public.quiz_submissions (user_id, version_id, completed_at, payment_status)
+  VALUES (v_user_id, v_version.id, now(), 'unpaid')
+  RETURNING id INTO v_submission_id;
 
   FOR ans IN SELECT * FROM jsonb_array_elements(payload->'answers')
   LOOP
-    INSERT INTO submission_answers (
-      submission_id,
-      question_id,
-      selected_answer_ids,
-      snapshot
-    )
+    v_qid := (ans->>'question_id')::uuid;
+    IF v_qid = ANY (v_seen) THEN
+      RAISE EXCEPTION 'Pytanie występuje w odpowiedziach więcej niż raz.';
+    END IF;
+    v_seen := v_seen || v_qid;
+
+    v_question := v_version.content->'questions'->(v_qid::text);
+    IF v_question IS NULL THEN
+      RAISE EXCEPTION 'Pytanie nie należy do tej wersji quizu.';
+    END IF;
+
+    SELECT array_agg(DISTINCT x::uuid) INTO v_selected
+      FROM jsonb_array_elements_text(ans->'selected_answer_ids') x;
+    IF v_selected IS NULL OR cardinality(v_selected) = 0 THEN
+      RAISE EXCEPTION 'Brak zaznaczonej odpowiedzi dla jednego z pytań.';
+    END IF;
+    IF (v_question->>'question_type') IN ('single', 'scale') AND cardinality(v_selected) <> 1 THEN
+      RAISE EXCEPTION 'To pytanie wymaga dokładnie jednej odpowiedzi.';
+    END IF;
+    IF EXISTS (
+      SELECT 1 FROM unnest(v_selected) s
+      WHERE NOT EXISTS (
+        SELECT 1 FROM jsonb_array_elements(v_question->'answers') a WHERE (a->>'id')::uuid = s
+      )
+    ) THEN
+      RAISE EXCEPTION 'Wybrana odpowiedź nie należy do pytania.';
+    END IF;
+
+    INSERT INTO public.submission_answers (submission_id, question_id, selected_answer_ids, snapshot)
     VALUES (
-      new_submission_id,
-      (ans->>'question_id')::UUID,
-      (SELECT array_agg(x::text::uuid) FROM jsonb_array_elements_text(ans->'selected_answer_ids') x),
-      ans->'snapshot'
+      v_submission_id,
+      -- the library question may have been deleted since the version was saved
+      CASE WHEN EXISTS (SELECT 1 FROM public.questions WHERE id = v_qid) THEN v_qid END,
+      v_selected,
+      jsonb_build_object(
+        'question_content', v_question->>'content',
+        'question_type', v_question->>'question_type',
+        'answers', (
+          SELECT jsonb_agg(jsonb_build_object(
+            'answer_id', a->>'id',
+            'content', a->>'content',
+            'tags', COALESCE((
+              SELECT jsonb_agg(jsonb_build_object('tag_slug', t->>'tag_slug', 'points', (t->>'points')::int))
+              FROM jsonb_array_elements(a->'tags') t
+            ), '[]'::jsonb)
+          ))
+          FROM jsonb_array_elements(v_question->'answers') a
+        )
+      )
     );
   END LOOP;
 
-  -- Compute saturation and result
-  UPDATE quiz_submissions
-  SET computed_result = calculate_diagnostic_result(new_submission_id)
-  WHERE id = new_submission_id;
+  UPDATE public.quiz_submissions
+     SET computed_result = public.calculate_diagnostic_result(v_submission_id)
+   WHERE id = v_submission_id;
 
-  -- Write to user_quiz_status (not profiles)
   UPDATE public.user_quiz_status
-  SET quiz_completed = true,
-      completed_at = now()
-  WHERE user_id = v_user_id;
+     SET quiz_completed = true, completed_at = now()
+   WHERE user_id = v_user_id;
 
-  RETURN new_submission_id;
-
-EXCEPTION
-  WHEN OTHERS THEN
-    RAISE;
+  RETURN v_submission_id;
 END;
 $function$;
 
@@ -602,3 +842,4 @@ CREATE TRIGGER on_auth_user_created_quiz_status AFTER INSERT ON auth.users FOR E
 CREATE TRIGGER module_versions_guard BEFORE UPDATE OR DELETE ON public.module_versions FOR EACH ROW EXECUTE FUNCTION public.module_versions_guard();
 CREATE TRIGGER modules_delete_guard BEFORE DELETE ON public.modules FOR EACH ROW EXECUTE FUNCTION public.modules_delete_guard();
 CREATE TRIGGER modules_create_draft AFTER INSERT ON public.modules FOR EACH ROW EXECUTE FUNCTION public.modules_create_draft();
+CREATE TRIGGER quiz_versions_guard BEFORE UPDATE OR DELETE ON public.quiz_versions FOR EACH ROW EXECUTE FUNCTION public.quiz_versions_guard();

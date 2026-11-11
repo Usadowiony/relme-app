@@ -6,7 +6,10 @@
 --
 -- RULE: any change to the database MUST be reflected in these files in the same
 -- task (update the relevant statement in place, do not append migrations).
--- Last synced with live DB: 2026-11-11 (T5.2)
+-- Last synced with live DB: 2026-11-11 (T5.3)
+--
+-- Not part of the rebuild: schema backup_t53_20261111 (one-off copy of the quiz
+-- tables taken before the T5.3 migration; no access for anon/authenticated).
 -- =============================================================================
 
 -- ---------- Extensions ----------
@@ -100,6 +103,11 @@ CREATE TABLE public.answer_tags (
   created_at timestamp with time zone NOT NULL DEFAULT now()
 );
 
+-- Quiz uses the same CMS-style versioning model as modules (T5.3):
+--   quiz_draft (admin working layout, autosaved) + the question/tag library
+--   (working copy of the content) → quiz_versions (named immutable packages:
+--   layout + frozen questions/answers/tag points). Users get only the 'live'
+--   version; status 'draft' here means "saved, never published".
 CREATE TABLE public.quiz_versions (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   name text NOT NULL DEFAULT 'Nowy Draft'::text,
@@ -108,8 +116,21 @@ CREATE TABLE public.quiz_versions (
   question_count integer NOT NULL DEFAULT 0,
   created_at timestamp with time zone DEFAULT now(),
   published_at timestamp with time zone,
-  created_by uuid
+  created_by uuid,
+  content jsonb NOT NULL,
+  version_number integer NOT NULL
 );
+COMMENT ON COLUMN public.quiz_versions.content IS 'Frozen package built by build_quiz_version_content(): {questions: {id: {id, content, question_type, media_url, answers: [{id, content, tags: [{tag_id, tag_slug, points, is_scored}]}]}}, tags: [{id, slug, color, is_scored}]}.';
+
+-- Single-row working draft of the quiz layout.
+CREATE TABLE public.quiz_draft (
+  id boolean NOT NULL DEFAULT true,
+  layout_data jsonb NOT NULL DEFAULT '[]'::jsonb,
+  revision integer NOT NULL DEFAULT 0,
+  updated_by uuid,
+  updated_at timestamp with time zone NOT NULL DEFAULT now()
+);
+COMMENT ON COLUMN public.quiz_draft.revision IS 'Optimistic lock: incremented on every save; a save with a stale revision is rejected (SQLSTATE RL409). 0 = never saved from the admin panel.';
 
 CREATE TABLE public.quiz_submissions (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -199,6 +220,7 @@ ALTER TABLE public.questions          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.answers            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.answer_tags        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.quiz_versions      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.quiz_draft         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.quiz_submissions   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.submission_answers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.modules            ENABLE ROW LEVEL SECURITY;
@@ -217,6 +239,7 @@ ALTER TABLE public.modules ADD CONSTRAINT modules_pkey PRIMARY KEY (id);
 ALTER TABLE public.profiles ADD CONSTRAINT profiles_pkey PRIMARY KEY (id);
 ALTER TABLE public.questions ADD CONSTRAINT questions_pkey PRIMARY KEY (id);
 ALTER TABLE public.quiz_paths ADD CONSTRAINT quiz_paths_pkey PRIMARY KEY (id);
+ALTER TABLE public.quiz_draft ADD CONSTRAINT quiz_draft_pkey PRIMARY KEY (id);
 ALTER TABLE public.quiz_submissions ADD CONSTRAINT quiz_submissions_pkey PRIMARY KEY (id);
 ALTER TABLE public.quiz_versions ADD CONSTRAINT quiz_versions_pkey PRIMARY KEY (id);
 ALTER TABLE public.submission_answers ADD CONSTRAINT submission_answers_pkey PRIMARY KEY (id);
@@ -229,6 +252,7 @@ ALTER TABLE public.user_roles ADD CONSTRAINT user_roles_pkey PRIMARY KEY (user_i
 ALTER TABLE public.module_progress ADD CONSTRAINT module_progress_user_id_module_id_key UNIQUE (user_id, module_id);
 ALTER TABLE public.module_versions ADD CONSTRAINT module_versions_id_module_id_key UNIQUE (id, module_id);
 ALTER TABLE public.module_versions ADD CONSTRAINT module_versions_module_id_version_number_key UNIQUE (module_id, version_number);
+ALTER TABLE public.quiz_versions ADD CONSTRAINT quiz_versions_version_number_key UNIQUE (version_number);
 ALTER TABLE public.subscriptions ADD CONSTRAINT subscriptions_user_id_key UNIQUE (user_id);
 ALTER TABLE public.tags ADD CONSTRAINT tags_slug_key UNIQUE (slug);
 
@@ -239,6 +263,8 @@ ALTER TABLE public.profiles ADD CONSTRAINT profiles_date_of_birth_adult CHECK ((
 ALTER TABLE public.profiles ADD CONSTRAINT profiles_first_name_valid CHECK (((first_name IS NULL) OR (((char_length(btrim(first_name)) >= 2) AND (char_length(btrim(first_name)) <= 60)) AND (btrim(first_name) ~ '^[[:alpha:]][[:alpha:] ''-]{1,59}$'::text))));
 ALTER TABLE public.profiles ADD CONSTRAINT profiles_gender_allowed_values CHECK (((gender IS NULL) OR (gender = ANY (ARRAY['male'::text, 'female'::text, 'other'::text]))));
 ALTER TABLE public.profiles ADD CONSTRAINT profiles_last_name_valid CHECK (((last_name IS NULL) OR (((char_length(btrim(last_name)) >= 2) AND (char_length(btrim(last_name)) <= 60)) AND (btrim(last_name) ~ '^[[:alpha:]][[:alpha:] ''-]{1,59}$'::text))));
+ALTER TABLE public.quiz_draft ADD CONSTRAINT quiz_draft_id_check CHECK (id); -- single row
+ALTER TABLE public.quiz_versions ADD CONSTRAINT quiz_versions_name_check CHECK (((char_length(btrim(name)) >= 1) AND (char_length(btrim(name)) <= 50)));
 ALTER TABLE public.quiz_versions ADD CONSTRAINT quiz_versions_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'live'::text, 'archived'::text])));
 ALTER TABLE public.tags ADD CONSTRAINT tags_color_check CHECK (((color IS NULL) OR (color ~* '^#[0-9a-f]{6}$'::text)));
 ALTER TABLE public.tags ADD CONSTRAINT tags_slug_check CHECK (((length(TRIM(BOTH FROM slug)) > 0) AND (length(slug) <= 20)));
@@ -264,7 +290,9 @@ ALTER TABLE public.profiles ADD CONSTRAINT profiles_id_fkey FOREIGN KEY (id) REF
 ALTER TABLE public.questions ADD CONSTRAINT questions_media_id_fkey FOREIGN KEY (media_id) REFERENCES public.media_assets(id) ON DELETE SET NULL;
 ALTER TABLE public.questions ADD CONSTRAINT questions_path_id_fkey FOREIGN KEY (path_id) REFERENCES public.quiz_paths(id) ON DELETE CASCADE;
 ALTER TABLE public.quiz_submissions ADD CONSTRAINT quiz_submissions_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
-ALTER TABLE public.quiz_submissions ADD CONSTRAINT quiz_submissions_version_id_fkey FOREIGN KEY (version_id) REFERENCES public.quiz_versions(id) ON DELETE CASCADE;
+ALTER TABLE public.quiz_draft ADD CONSTRAINT quiz_draft_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES auth.users(id) ON DELETE SET NULL;
+-- Results must never disappear with a version.
+ALTER TABLE public.quiz_submissions ADD CONSTRAINT quiz_submissions_version_id_fkey FOREIGN KEY (version_id) REFERENCES public.quiz_versions(id) ON DELETE RESTRICT;
 ALTER TABLE public.quiz_versions ADD CONSTRAINT quiz_versions_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id);
 ALTER TABLE public.submission_answers ADD CONSTRAINT submission_answers_question_id_fkey FOREIGN KEY (question_id) REFERENCES public.questions(id) ON DELETE SET NULL;
 ALTER TABLE public.submission_answers ADD CONSTRAINT submission_answers_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.quiz_submissions(id) ON DELETE CASCADE;
@@ -274,6 +302,12 @@ ALTER TABLE public.user_roles ADD CONSTRAINT user_roles_user_id_fkey FOREIGN KEY
 
 -- ---------- Indexes (other than PK / unique constraints) ----------
 CREATE INDEX module_versions_module_id_idx ON public.module_versions USING btree (module_id);
+-- At most one live quiz version.
+CREATE UNIQUE INDEX quiz_versions_single_live ON public.quiz_versions USING btree ((true)) WHERE (status = 'live'::text);
+
+-- ---------- Required rows ----------
+-- The quiz draft row must exist (save_quiz_draft_rpc only updates it).
+INSERT INTO public.quiz_draft (id) VALUES (true) ON CONFLICT (id) DO NOTHING;
 
 -- ---------- Storage ----------
 -- Public bucket for quiz media. (No custom policies exist on storage.objects in the live DB.)

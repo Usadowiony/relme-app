@@ -8,6 +8,7 @@ import type {
   ModuleVersion,
 } from '../types/modules'
 import { assertValidFlowStructure, normalizeFlow, validateFlowContent } from '../utils/moduleFlow'
+import { rpcError } from './draftConflict'
 
 // ============================================================
 // Modules API — versioning model (T5.2)
@@ -33,20 +34,6 @@ async function assertAdminRole(): Promise<void> {
   }
 }
 
-/** Thrown when the draft changed since the editor loaded it (other tab / other admin). */
-export class DraftConflictError extends Error {
-  constructor() {
-    super('Szkic modułu został zmieniony w innym oknie lub przez inną osobę.')
-    this.name = 'DraftConflictError'
-  }
-}
-
-const CONFLICT_CODE = 'RL409' // raised by save_module_draft_rpc / create_module_version_rpc
-
-function rpcError(error: { code?: string; message?: string }, fallback: string): Error {
-  if (error.code === CONFLICT_CODE) return new DraftConflictError()
-  return new Error(error.message || fallback)
-}
 
 function toDraft(row: Record<string, unknown>): ModuleDraft {
   return { ...(row as ModuleDraft), flow_data: normalizeFlow(row.flow_data) }

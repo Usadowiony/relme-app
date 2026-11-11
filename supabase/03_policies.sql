@@ -3,7 +3,7 @@
 -- =============================================================================
 -- Run after 01_schema.sql and 02_functions.sql (policies call has_role()).
 -- RULE: update in place whenever a policy changes in the live DB.
--- Last synced with live DB: 2026-11-11 (T5.2)
+-- Last synced with live DB: 2026-11-11 (T5.3)
 -- =============================================================================
 
 -- ---------- answer_tags ----------
@@ -108,15 +108,16 @@ CREATE POLICY "quiz_paths_delete_admin" ON public.quiz_paths AS PERMISSIVE FOR D
 CREATE POLICY "Uzytkownik widzi swoje submisje" ON public.quiz_submissions AS PERMISSIVE FOR SELECT TO public
   USING ((auth.uid() = user_id));
 
+-- ---------- quiz_draft ----------
+-- Admins read; writes only through save_quiz_draft_rpc.
+CREATE POLICY "quiz_draft_admin_select" ON public.quiz_draft AS PERMISSIVE FOR SELECT TO public
+  USING (has_role('admin'::app_role));
+
 -- ---------- quiz_versions ----------
+-- Read by players (live version) and the admin panel; no direct writes —
+-- create / publish / delete only through the quiz versioning RPCs.
 CREATE POLICY "quiz_versions_select_auth" ON public.quiz_versions AS PERMISSIVE FOR SELECT TO public
   USING (true);
-CREATE POLICY "quiz_versions_insert_admin" ON public.quiz_versions AS PERMISSIVE FOR INSERT TO public
-  WITH CHECK (has_role('admin'::app_role));
-CREATE POLICY "quiz_versions_update_admin" ON public.quiz_versions AS PERMISSIVE FOR UPDATE TO public
-  USING (has_role('admin'::app_role));
-CREATE POLICY "quiz_versions_delete_admin" ON public.quiz_versions AS PERMISSIVE FOR DELETE TO public
-  USING (has_role('admin'::app_role));
 
 -- ---------- submission_answers ----------
 CREATE POLICY "Uzytkownik widzi odpowiedzi swoich submisji" ON public.submission_answers AS PERMISSIVE FOR SELECT TO public

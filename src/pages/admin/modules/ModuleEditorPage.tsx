@@ -3,25 +3,21 @@ import type { PointerEvent, RefObject } from 'react'
 import { Link, useLoaderData } from 'react-router-dom'
 import { Reorder, useDragControls } from 'framer-motion'
 import {
-  Check,
   ChevronRight,
   CircleAlert,
   GitBranch,
   GripVertical,
-  Loader2,
   Pencil,
   Play,
   Plus,
-  RefreshCw,
   Trash2,
 } from 'lucide-react'
 import type { BlockConfigMap, BlockType, ModuleEditorData, ModuleVersion, ModuleView } from '../../../types/modules'
 import { createDefaultConfig, flowsEqual, validateView } from '../../../utils/moduleFlow'
 import { Toast } from '../../../components/ui/popups/Toast'
-import { ConfirmDialog } from '../../../components/ui/popups/ConfirmDialog'
+import { DraftConflictNotice, SaveIndicator } from '../../../components/admin/DraftStatus'
 import { useModuleFlow } from './hooks/useModuleFlow'
 import { useModuleAutosave } from './hooks/useModuleAutosave'
-import type { SaveStatus } from './hooks/useModuleAutosave'
 import { getBlockDefinition } from './blocks/registry'
 import { BlockEditModal } from './components/BlockEditModal'
 import { BlockLibrary, BlockPickerModal } from './components/BlockLibrary'
@@ -56,7 +52,6 @@ function ModuleEditor({ data }: { data: ModuleEditorData }) {
   const [isPickerOpen, setIsPickerOpen] = useState(false)
   const [isVersionOpen, setIsVersionOpen] = useState(false)
   const [dismissedError, setDismissedError] = useState<string | null>(null)
-  const [confirmOverwrite, setConfirmOverwrite] = useState(false)
   const timelineRef = useRef<HTMLUListElement>(null)
 
   const handlePickBlock = (type: BlockType) => {
@@ -152,29 +147,7 @@ function ModuleEditor({ data }: { data: ModuleEditorData }) {
         </div>
       </div>
 
-      {isConflict && (
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-[16px] border border-amber-200 bg-amber-50 px-5 py-4 text-[14px] text-amber-900">
-          <span>
-            Ten moduł został zmieniony w innym oknie lub przez inną osobę. Twoje ostatnie zmiany <b>nie zostały zapisane</b>.
-          </span>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-[13px] font-semibold text-dark shadow-sm hover:bg-neutral cursor-pointer"
-            >
-              <RefreshCw className="size-4" /> Wczytaj aktualny stan
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirmOverwrite(true)}
-              className="rounded-full px-4 py-2 text-[13px] font-semibold text-[#A82B3E] hover:bg-red-50 cursor-pointer"
-            >
-              Zachowaj moje zmiany…
-            </button>
-          </div>
-        </div>
-      )}
+      {isConflict && <DraftConflictNotice subject="Ten moduł" onOverwrite={overwriteRemote} />}
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] gap-8 items-start">
         {/* Timeline */}
@@ -235,23 +208,6 @@ function ModuleEditor({ data }: { data: ModuleEditorData }) {
         onLoadVersion={v => replaceFlow(v.flow_data)}
         onPublish={versions.publish}
         onDelete={versions.remove}
-      />
-
-      <ConfirmDialog
-        open={confirmOverwrite}
-        tone="danger"
-        title="Zachować Twoje zmiany?"
-        description="Szkic tego modułu został w międzyczasie zapisany w innym oknie lub przez inną osobę. Możesz nadpisać go tym, co widzisz teraz na ekranie."
-        consequences={[
-          'Zmiany zapisane w innym oknie lub przez inną osobę zostaną utracone.',
-          'Zapisane wersje modułu i wersja live się nie zmienią.',
-        ]}
-        confirmLabel="Tak, nadpisz szkic"
-        onConfirm={async () => {
-          await overwriteRemote()
-          setConfirmOverwrite(false)
-        }}
-        onCancel={() => setConfirmOverwrite(false)}
       />
 
       <Toast
@@ -380,36 +336,5 @@ function ViewItem({ view, index, boundsRef, onEdit, onRemove }: ViewItemProps) {
         </div>
       </div>
     </Reorder.Item>
-  )
-}
-
-// --- Save status ---
-
-function SaveIndicator({ status, onRetry }: { status: SaveStatus; onRetry: () => void }) {
-  if (status === 'conflict') {
-    return (
-      <span className="flex items-center gap-1.5 text-[12px] font-medium text-[#B26B00]">
-        <CircleAlert className="size-4" /> Konflikt — zmiany niezapisane
-      </span>
-    )
-  }
-  if (status === 'error') {
-    return (
-      <button type="button" onClick={onRetry} className="flex items-center gap-1.5 text-[12px] font-medium text-[#C03448] cursor-pointer hover:underline">
-        <CircleAlert className="size-4" /> Błąd zapisu — ponów
-      </button>
-    )
-  }
-  if (status === 'saving' || status === 'pending') {
-    return (
-      <span className="flex items-center gap-1.5 text-[12px] text-dark/50">
-        <Loader2 className="size-4 animate-spin" /> Zapisywanie…
-      </span>
-    )
-  }
-  return (
-    <span className="flex items-center gap-1.5 text-[12px] text-dark/50">
-      <Check className="size-4" /> Zapisano
-    </span>
   )
 }

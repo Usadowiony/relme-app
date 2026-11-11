@@ -68,22 +68,67 @@ export type LayoutItem = {
   paths: LayoutPath[]
 }
 
-export type DraftState = {
+/** Legacy browser draft (localStorage) — only read once to import it into the DB. */
+export type LegacyLocalDraft = {
   items: LayoutItem[]
   name: string
   lastModified: string
   versionId?: string
 }
 
+// ============================================================
+// Versioning (T5.3) — a version is ONE frozen package: layout + questions
+// + answers + tags with points. Users only ever get the live version.
+// ============================================================
+
+export type QuizContentTag = {
+  tag_id: string
+  tag_slug: string
+  points: number
+  is_scored: boolean
+}
+
+export type QuizContentAnswer = {
+  id: string
+  content: string
+  tags: QuizContentTag[]
+}
+
+export type QuizContentQuestion = {
+  id: string
+  content: string
+  question_type: QuestionType
+  media_url: string | null
+  answers: QuizContentAnswer[]
+}
+
+/** Frozen package built on the server (build_quiz_version_content). */
+export type QuizVersionContent = {
+  questions: Record<string, QuizContentQuestion>
+  tags: { id: string; slug: string; color: string | null; is_scored: boolean }[]
+}
+
+/** DB status: 'draft' = saved, never published; 'archived' = was live before. */
+export type QuizVersionStatus = 'draft' | 'live' | 'archived'
+
 export type QuizVersion = {
   id: string
   name: string
-  status: 'draft' | 'live' | 'archived'
+  status: QuizVersionStatus
+  version_number: number
   layout_data: LayoutItem[]
+  content: QuizVersionContent
   question_count: number
   created_at: string
   published_at: string | null
   created_by: string | null
+}
+
+/** The admin's working layout (single row, autosaved with an optimistic lock). */
+export type QuizDraft = {
+  layout_data: LayoutItem[]
+  revision: number
+  updated_at: string
 }
 
 // Snapshot Pattern for Submissions

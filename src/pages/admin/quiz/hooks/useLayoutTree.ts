@@ -1,10 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
-import type { LayoutItem, DraftState } from '../../../../types/quiz'
-import { saveDraftToLocal, loadDraftFromLocal } from '../../../../api/quiz.api'
-
-function createEmptyDraft(): DraftState {
-  return { items: [], name: 'Nowy Draft', lastModified: new Date().toISOString() }
-}
+import { useCallback } from 'react'
+import type { Dispatch, SetStateAction } from 'react'
+import type { LayoutItem } from '../../../../types/quiz'
 
 export function findSiblingIds(items: LayoutItem[], targetQId: string, targetPathIdx: number): string[] {
   for (const item of items) {
@@ -19,31 +15,19 @@ export function findSiblingIds(items: LayoutItem[], targetQId: string, targetPat
   return []
 }
 
-export function useLayoutTree() {
-  const [draft, setDraft] = useState<DraftState>(() => loadDraftFromLocal() || createEmptyDraft())
+type DraftView = { items: LayoutItem[] }
 
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      saveDraftToLocal(draft)
-    }, 500)
-    return () => clearTimeout(timeout)
-  }, [draft])
+/**
+ * Layout-tree operations on the working layout. The state itself lives in
+ * the quiz page (useQuizDraft — autosaved to the DB), so it survives tab
+ * switches; this hook only provides the mutations.
+ */
+export function useLayoutTree(items: LayoutItem[], setItems: Dispatch<SetStateAction<LayoutItem[]>>) {
+  const draft: DraftView = { items }
 
-  useEffect(() => {
-    const handleDraftUpdated = () => {
-      setDraft(loadDraftFromLocal() || createEmptyDraft())
-    }
-    window.addEventListener('draftUpdated', handleDraftUpdated)
-    return () => window.removeEventListener('draftUpdated', handleDraftUpdated)
-  }, [])
-
-  const updateDraft = useCallback((updater: (prev: DraftState) => DraftState) => {
-    setDraft(prev => {
-      const next = updater(prev)
-      next.lastModified = new Date().toISOString()
-      return next
-    })
-  }, [])
+  const updateDraft = useCallback((updater: (prev: DraftView) => DraftView) => {
+    setItems(prev => updater({ items: prev }).items)
+  }, [setItems])
 
   const addRootQuestion = (questionId: string) => {
     updateDraft(d => ({
@@ -112,7 +96,6 @@ export function useLayoutTree() {
 
   return {
     draft,
-    setDraft,
     addRootQuestion,
     addNestedQuestionToPath,
     removeRootQuestion,
