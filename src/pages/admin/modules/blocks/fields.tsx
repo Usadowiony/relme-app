@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
+import { Plus, X } from 'lucide-react'
 import type { ValidationErrors } from '../../../../utils/moduleFlow'
 
 // Shared form primitives for block editors (admin only).
@@ -10,75 +11,6 @@ export type BlockFormProps<C> = {
   errors: ValidationErrors
   /** Forms wrap their inputs in `<fieldset disabled={readOnly}>`; navigation (tabs, pickers) stays usable. */
   readOnly: boolean
-}
-
-type FieldProps = {
-  label: string
-  error?: string
-  hint?: string
-  children: ReactNode
-}
-
-export function Field({ label, error, hint, children }: FieldProps) {
-  return (
-    <div className="flex flex-col gap-2">
-      <label className="text-[11px] font-semibold tracking-widest uppercase text-dark/70">{label}</label>
-      {children}
-      {error ? (
-        <p className="text-[12px] text-[#C03448]">{error}</p>
-      ) : hint ? (
-        <p className="text-[12px] text-dark/50">{hint}</p>
-      ) : null}
-    </div>
-  )
-}
-
-const baseInput =
-  'w-full rounded-[12px] bg-[#F1F3F3] px-4 py-3 text-[14px] text-dark placeholder:text-dark/40 outline-none border transition-colors focus:bg-white focus:border-dark/20 disabled:opacity-70'
-
-function borderClass(invalid?: boolean) {
-  return invalid ? 'border-[#E7B2B9]' : 'border-transparent'
-}
-
-type TextInputProps = {
-  value: string
-  onChange: (value: string) => void
-  maxLength: number
-  placeholder?: string
-  invalid?: boolean
-}
-
-export function TextInput({ value, onChange, maxLength, placeholder, invalid }: TextInputProps) {
-  return (
-    <input
-      type="text"
-      value={value}
-      maxLength={maxLength}
-      placeholder={placeholder}
-      onChange={e => onChange(e.target.value)}
-      className={`${baseInput} ${borderClass(invalid)}`}
-    />
-  )
-}
-
-type TextAreaProps = TextInputProps & { rows?: number }
-
-export function TextArea({ value, onChange, maxLength, placeholder, invalid, rows = 3 }: TextAreaProps) {
-  return (
-    <div className="relative">
-      <textarea
-        value={value}
-        rows={rows}
-        maxLength={maxLength}
-        placeholder={placeholder}
-        onChange={e => onChange(e.target.value)}
-        className={`${baseInput} ${borderClass(invalid)} resize-none pb-6`}
-      />
-      <span className="absolute right-3 bottom-2 text-[10px] text-dark/40">
-        {value.length}/{maxLength}
-      </span>
-    </div>
-  )
 }
 
 // --- Preview-style editing ---
@@ -92,9 +24,10 @@ type InlineTextProps = {
   placeholder: string
   error?: string
   className?: string
+  autoFocus?: boolean
 }
 
-export function InlineText({ value, onChange, maxLength, placeholder, error, className = '' }: InlineTextProps) {
+export function InlineText({ value, onChange, maxLength, placeholder, error, className = '', autoFocus }: InlineTextProps) {
   const ref = useRef<HTMLTextAreaElement>(null)
 
   useLayoutEffect(() => {
@@ -109,6 +42,7 @@ export function InlineText({ value, onChange, maxLength, placeholder, error, cla
       <textarea
         ref={ref}
         rows={1}
+        autoFocus={autoFocus}
         value={value}
         maxLength={maxLength}
         placeholder={placeholder}
@@ -126,41 +60,62 @@ export function InlineText({ value, onChange, maxLength, placeholder, error, cla
   )
 }
 
-type IconButtonProps = {
-  title: string
-  disabled?: boolean
-  danger?: boolean
-  onClick: () => void
-  children: ReactNode
+// --- Block popup tabs ("Treść ćwiczenia" / "Interpretacja odpowiedzi") ---
+
+export type BlockTab<T extends string> = { id: T; label: string; errorCount: number }
+
+export function BlockTabs<T extends string>({ tabs, active, onChange }: {
+  tabs: BlockTab<T>[]
+  active: T
+  onChange: (tab: T) => void
+}) {
+  return (
+    <div role="tablist" className="flex gap-1 self-start rounded-full bg-neutral p-1">
+      {tabs.map(t => (
+        <button
+          key={t.id}
+          type="button"
+          role="tab"
+          aria-selected={active === t.id}
+          onClick={() => onChange(t.id)}
+          className={`flex items-center gap-2 rounded-full px-4 py-2 text-[13px] font-semibold transition-colors cursor-pointer ${
+            active === t.id ? 'bg-white text-dark shadow-sm' : 'text-dark/55 hover:text-dark'
+          }`}
+        >
+          {t.label}
+          {t.errorCount > 0 && (
+            <span className="rounded-full bg-[#C03448] px-1.5 text-[10px] font-bold leading-4 text-white">{t.errorCount}</span>
+          )}
+        </button>
+      ))}
+    </div>
+  )
 }
 
-export function IconButton({ title, disabled, danger, onClick, children }: IconButtonProps) {
+/** Small "×" shown on hover of a `group` row (list points, answers). Hidden in read-only fieldsets via `disabled:invisible`. */
+export function RemoveButton({ title, disabled, onClick }: { title: string; disabled?: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
       title={title}
       disabled={disabled}
       onClick={onClick}
-      className={`size-7 rounded-full flex items-center justify-center transition-colors cursor-pointer disabled:opacity-25 disabled:cursor-default ${
-        danger ? 'text-[#D15F5F] hover:bg-red-50' : 'text-dark/60 hover:bg-white'
-      }`}
+      className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-dark/50 opacity-0 transition-opacity hover:bg-white group-hover:opacity-100 focus:opacity-100 cursor-pointer disabled:invisible"
     >
-      {children}
+      <X className="size-3.5" />
     </button>
   )
 }
 
-type AddButtonProps ={ onClick: () => void; children: ReactNode; disabled?: boolean }
-
-export function AddButton({ onClick, children, disabled }: AddButtonProps) {
+/** Subtle "+ Dodaj …" text link under a list. */
+export function AddLink({ onClick, children }: { onClick: () => void; children: ReactNode }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={disabled}
-      className="self-start text-[11px] font-bold tracking-widest uppercase text-dark/70 hover:text-dark disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+      className="mt-2 flex items-center gap-1 text-[12px] font-semibold text-dark/50 hover:text-dark cursor-pointer disabled:hidden"
     >
-      ⊕ {children}
+      <Plus className="size-3.5" /> {children}
     </button>
   )
 }

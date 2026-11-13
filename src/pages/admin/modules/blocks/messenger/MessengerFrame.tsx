@@ -1,13 +1,16 @@
 import type { ReactNode } from 'react'
 import { UserRound } from 'lucide-react'
-import type { MessengerAvatar } from '../../../../../types/modules'
-import { AVATARS } from './theme'
 
-/** Static avatar placeholder (real graphics come from the media library later). */
-export function AvatarCircle({ avatar }: { avatar: MessengerAvatar | null }) {
-  const style = AVATARS[avatar ?? 'female']
+/**
+ * Neutral avatar placeholder. The real character is chosen by the mobile app
+ * from the user's gender (and real graphics come from the media library later).
+ */
+export function AvatarCircle() {
   return (
-    <div className="flex size-9 shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: style.bg, color: style.color }}>
+    <div
+      title="Postać rozmówcy dobiera aplikacja na podstawie płci użytkownika"
+      className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#E6EAEC] text-[#7A868C]"
+    >
       <UserRound className="size-[18px]" />
     </div>
   )

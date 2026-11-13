@@ -17,7 +17,7 @@ import {
 } from '../../../../../utils/moduleFlow'
 import type { ValidationErrors } from '../../../../../utils/moduleFlow'
 import { removeAt, replaceAt } from '../../../../../utils/arrays'
-import { InlineText } from '../fields'
+import { AddLink, InlineText, RemoveButton } from '../fields'
 import { CONTACT_BUBBLE, MSG_GREEN, MSG_RED } from './theme'
 import { AvatarCircle, PhoneFrame } from './MessengerFrame'
 
@@ -121,7 +121,6 @@ export function ExplanationEditor({ config, onChange, errors, readOnly }: Explan
             <AnswerExplanation
               key={answer.option.id}
               item={answer}
-              avatar={config.avatar}
               errors={errors}
               onChange={e => setExplanation(answer.option.id, e)}
             />
@@ -208,9 +207,8 @@ function PickerButton({ selected, done, correct, onClick, children }: {
 
 // --- Answer explanation (inside the white card, under "Wyjaśnienie") ---
 
-function AnswerExplanation({ item, avatar, errors, onChange }: {
+function AnswerExplanation({ item, errors, onChange }: {
   item: AnswerItem
-  avatar: ExerciseMessengerConfig['avatar']
   errors: ValidationErrors
   onChange: (e: MessengerExplanation) => void
 }) {
@@ -224,7 +222,7 @@ function AnswerExplanation({ item, avatar, errors, onChange }: {
     <PhoneFrame>
       {/* Reminder: contact's message and the picked answer */}
       <div className="flex items-start gap-2.5">
-        <AvatarCircle avatar={avatar} />
+        <AvatarCircle />
         <div className={`max-w-[78%] break-words ${CONTACT_BUBBLE}`}>{item.contactMessage.trim() || '—'}</div>
       </div>
       <div className="mt-4 flex items-center justify-end gap-2">
@@ -452,33 +450,5 @@ function ConclusionEditor({ node, errors, onChange }: {
         )}
       </div>
     </div>
-  )
-}
-
-// --- Small controls ---
-
-function RemoveButton({ title, disabled, onClick }: { title: string; disabled?: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      title={title}
-      disabled={disabled}
-      onClick={onClick}
-      className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-dark/50 opacity-0 transition-opacity hover:bg-white group-hover:opacity-100 focus:opacity-100 cursor-pointer disabled:invisible"
-    >
-      <X className="size-3.5" />
-    </button>
-  )
-}
-
-function AddLink({ onClick, children }: { onClick: () => void; children: ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="mt-2 flex items-center gap-1 text-[12px] font-semibold text-dark/50 hover:text-dark cursor-pointer disabled:hidden"
-    >
-      <Plus className="size-3.5" /> {children}
-    </button>
   )
 }

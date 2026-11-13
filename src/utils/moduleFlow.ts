@@ -4,6 +4,8 @@ import type {
   ContrastListCard,
   ContrastNoteCard,
   ExerciseMessengerConfig,
+  ExercisePollConfig,
+  ExerciseThoughtRecordConfig,
   KnowledgeBehavioralContrastConfig,
   MessengerConclusion,
   MessengerExplanation,
@@ -12,6 +14,13 @@ import type {
   MessengerWidget,
   ModuleFlowData,
   ModuleView,
+  ChoiceOption,
+  ChoiceStep,
+  ExerciseIMessageConfig,
+  ExerciseOutcome,
+  ExercisePatternDetectorConfig,
+  ExerciseQuizConfig,
+  ShortConclusion,
 } from '../types/modules'
 import { jsonEqual } from './json'
 
@@ -51,6 +60,77 @@ export const MODULE_LIMITS = {
     point: 200,
     noteText: 300,
   },
+  poll: {
+    minOptions: 2,
+    maxOptions: 6,
+    question: 160,
+    option: 100,
+  },
+  // Shared by step exercises (thought-record, i-message)
+  steps: {
+    // content tab
+    minOptions: 3,
+    maxOptions: 4,
+    hintTitle: 40,
+    hintText: 300,
+    stepTitle: 80,
+    stepSubtitle: 120,
+    optionLabel: 80,
+    optionDescription: 150,
+    // interpretation tab
+    optionExplanation: 600,
+    resultTitle: 80,
+    resultBody: 400,
+    explTitle: 100,
+    explBody: 800,
+    conclusionTitle: 80,
+    conclusionBody: 600,
+    widgetTitle: 60,
+    reason: 160,
+    minReasons: 2,
+    maxReasons: 5,
+    rememberLead: 160,
+    rememberText: 400,
+  },
+  thoughtRecord: {
+    minSteps: 2,
+    maxSteps: 5, // ABC = 3, ABCDE = 5; Gottman horseman → antidote = 2
+    situation: 300,
+    reactionStepTitle: 60,
+    reactionStepText: 200,
+    minReactionSteps: 2,
+    maxReactionSteps: 6,
+  },
+  iMessage: {
+    steps: 4, // observation, feeling, need, request (fixed)
+    contextTitle: 80,
+    contextBody: 300,
+    partnerMessage: 300,
+  },
+  patternDetector: {
+    title: 60,
+    subtitle: 200,
+    text: 600,
+    maxFlags: 6,
+    flagTitle: 60,
+    explanation: 500,
+    resultTitle: 80,
+    resultBody: 300,
+    conclusionTitle: 60,
+    conclusionBody: 500,
+    rememberTitle: 40,
+    rememberText: 300,
+  },
+  quiz: {
+    instruction: 60,
+    minOptions: 2,
+    maxOptions: 6,
+    question: 160,
+    option: 100,
+    explanation: 500,
+    rememberTitle: 40,
+    rememberText: 300,
+  },
 } as const
 
 export function createId(): string {
@@ -78,6 +158,16 @@ export function normalizeFlow(raw: unknown): ModuleFlowData {
             return { ...view, config: normalizeContrastConfig(view.config) }
           case 'exercise-messenger':
             return { ...view, config: normalizeMessengerConfig(view.config) }
+          case 'exercise-poll':
+            return { ...view, config: normalizePollConfig(view.config) }
+          case 'exercise-thought-record':
+            return { ...view, config: normalizeThoughtRecordConfig(view.config) }
+          case 'exercise-i-message':
+            return { ...view, config: normalizeIMessageConfig(view.config) }
+          case 'exercise-pattern-detector':
+            return { ...view, config: { ...createDefaultConfig('exercise-pattern-detector'), ...(view.config as object) } }
+          case 'exercise-quiz':
+            return { ...view, config: { ...createDefaultConfig('exercise-quiz'), ...(view.config as object) } }
         }
       }),
     }
@@ -100,7 +190,8 @@ function normalizeMessengerConfig(raw: unknown): ExerciseMessengerConfig {
     next?: RawNode
   }
   type RawNode = Omit<Partial<MessengerNode>, 'options'> & { options?: RawOption[] }
-  const r = raw as { avatar?: ExerciseMessengerConfig['avatar']; root?: RawNode } & {
+  // Older drafts also stored `avatar` — dropped (the app picks it from the user's gender).
+  const r = raw as { root?: RawNode } & {
     steps?: { incoming_message?: string; options?: { text?: string; is_correct?: boolean; reply?: string; explanation?: string }[] }[]
   }
 
@@ -123,12 +214,11 @@ function normalizeMessengerConfig(raw: unknown): ExerciseMessengerConfig {
     }
   }
 
-  if (r.root) return { avatar: r.avatar ?? null, root: normalizeNode(r.root) }
+  if (r.root) return { root: normalizeNode(r.root) }
 
   const step = r.steps?.[0]
   if (!step) return defaults
   return {
-    avatar: null,
     root: normalizeNode({
       message: step.incoming_message,
       options: createMessengerOptions().map((opt, i) => {
@@ -166,9 +256,101 @@ function normalizeContrastConfig(raw: unknown): KnowledgeBehavioralContrastConfi
   }
 }
 
+/** Fills missing poll fields (keeps option ids — votes are keyed by them). */
+function normalizePollConfig(raw: unknown): ExercisePollConfig {
+  if (!raw || typeof raw !== 'object') return createDefaultConfig('exercise-poll')
+  const r = raw as Partial<ExercisePollConfig>
+  return {
+    question: r.question ?? '',
+    options: (r.options ?? []).map(o => ({ id: o?.id ?? createId(), text: o?.text ?? '' })),
+  }
+}
+
+/**
+ * Fills missing thought-record sections with defaults. Early drafts had a
+ * single (failure) interpretation at the top level — moved into `failure`.
+ */
+function normalizeThoughtRecordConfig(raw: unknown): ExerciseThoughtRecordConfig {
+  const defaults = createDefaultConfig('exercise-thought-record')
+  if (!raw || typeof raw !== 'object') return defaults
+  const r = raw as Partial<ExerciseThoughtRecordConfig> & Partial<ExerciseThoughtRecordConfig['failure']>
+  const failure = r.failure ?? {
+    result: r.result ?? defaults.failure.result,
+    explanation: r.explanation ?? defaults.failure.explanation,
+    conclusion: r.conclusion ? { ...defaults.failure.conclusion, ...r.conclusion } : defaults.failure.conclusion,
+  }
+  return {
+    situation: r.situation ?? '',
+    hint: r.hint ?? null,
+    steps: r.steps ?? defaults.steps,
+    success: r.success ?? defaults.success,
+    failure,
+  }
+}
+
+function normalizeIMessageConfig(raw: unknown): ExerciseIMessageConfig {
+  const defaults = createDefaultConfig('exercise-i-message')
+  if (!raw || typeof raw !== 'object') return defaults
+  const r = raw as Partial<ExerciseIMessageConfig>
+  return {
+    context: r.context ?? defaults.context,
+    partner_message: r.partner_message ?? '',
+    hint: r.hint ?? null,
+    steps: r.steps ?? defaults.steps,
+    success: r.success ?? defaults.success,
+    failure: r.failure ? { ...r.failure, conclusion: { ...defaults.failure.conclusion, ...r.failure.conclusion } } : defaults.failure,
+  }
+}
+
 // ============================================================
 // Default configs
 // ============================================================
+
+export function createChoiceOption(): ChoiceOption {
+  return { id: createId(), label: '', description: '', is_correct: false, explanation: '' }
+}
+
+/** A step with the minimum number of empty answers. */
+export function createChoiceStep(title = '', subtitle = ''): ChoiceStep {
+  return {
+    id: createId(),
+    title,
+    subtitle,
+    options: Array.from({ length: MODULE_LIMITS.steps.minOptions }, createChoiceOption),
+  }
+}
+
+function createOutcome<C>(resultTitle: string, conclusion: C): ExerciseOutcome<C> {
+  return { result: { title: resultTitle, body: '' }, explanation: { title: '', body: '' }, conclusion }
+}
+
+function createShortConclusion(): ShortConclusion {
+  return { title: 'Czas na wnioski', body: '', remember: null }
+}
+
+/** The 4 fixed NVC steps, pre-filled with the mockup wording (editable). */
+const I_MESSAGE_STEPS: [string, string][] = [
+  ['Wybierz obserwację', 'Jaki opis sytuacji przedstawia suchy fakt, bez ocen i uogólnień?'],
+  ['Wybierz uczucie', 'Które sformułowanie opisuje Twój stan emocjonalny, nie obwiniając drugiej strony?'],
+  ['Wybierz potrzebę', 'Jaka Twoja uniwersalna potrzeba kryje się pod tymi emocjami?'],
+  ['Wybierz prośbę', 'O jakie konkretne, możliwe do wykonania działanie chcesz poprosić?'],
+]
+
+/**
+ * Builds the "Treść odpowiedzi" message from picked answers: labels lose
+ * their leading/trailing "…" and are joined with ", " — or ". " when the next
+ * part starts with a capital letter (e.g. the request "Czy możemy…").
+ */
+export function composeIMessage(labels: string[]): string {
+  const parts = labels.map(l => l.trim().replace(/^[\s.…]+|[\s.…]+$/g, '')).filter(Boolean)
+  let out = ''
+  parts.forEach((part, i) => {
+    if (i === 0) out = part.charAt(0).toUpperCase() + part.slice(1)
+    else if (/^\p{Lu}/u.test(part)) out += `${/[.?!]$/.test(out) ? '' : '.'} ${part}`
+    else out += `${/[,;]$/.test(out) ? '' : ','} ${part}`
+  })
+  return out && !/[.?!]$/.test(out) ? `${out}.` : out
+}
 
 export function createMessengerConclusion(): MessengerConclusion {
   return {
@@ -208,7 +390,6 @@ export function createContrastNote(): ContrastNoteCard {
 export function createDefaultConfig<K extends BlockType>(type: K): BlockConfigMap[K] {
   const defaults: { [T in BlockType]: () => BlockConfigMap[T] } = {
     'exercise-messenger': () => ({
-      avatar: null,
       root: { ...createMessengerNode(), options: createMessengerOptions() },
     }),
     'knowledge-behavioral-contrast': () => ({
@@ -216,6 +397,49 @@ export function createDefaultConfig<K extends BlockType>(type: K): BlockConfigMa
       headline: '',
       avoid: { title: 'Zamiast', lead: '', points: [''] },
       focus: { title: 'Skup się na', lead: '', points: [''] },
+      remember: null,
+    }),
+    'exercise-poll': () => ({ question: '', options: [] }),
+    'exercise-thought-record': () => ({
+      situation: '',
+      hint: null,
+      steps: Array.from({ length: 3 }, () => createChoiceStep()), // A-B-C
+      success: createOutcome('To była trafna analiza', createShortConclusion()),
+      failure: createOutcome('To nie była odpowiednia analiza', {
+        ...createShortConclusion(),
+        reaction: {
+          title: 'Jak powinna wyglądać reakcja?',
+          steps: Array.from({ length: MODULE_LIMITS.thoughtRecord.minReactionSteps }, () => ({ title: '', text: '' })),
+        },
+        reasons: { title: 'Dlaczego to działa?', points: ['', ''] },
+      }),
+    }),
+    'exercise-i-message': () => ({
+      context: { title: '', body: '' },
+      partner_message: '',
+      hint: null,
+      steps: I_MESSAGE_STEPS.map(([title, subtitle]) => createChoiceStep(title, subtitle)),
+      success: createOutcome('To był dobry komunikat JA', createShortConclusion()),
+      failure: createOutcome('To nie był dobry komunikat JA', {
+        ...createShortConclusion(),
+        better_title: 'Tak mogła brzmieć Twoja odpowiedź',
+        reasons: { title: 'Dlaczego to działa?', points: ['', ''] },
+      }),
+    }),
+    'exercise-pattern-detector': () => ({
+      title: 'Detektyw wzorców',
+      subtitle: 'Zaznacz fragmenty wypowiedzi, które mogą być sygnałami ostrzegawczymi lub zielonymi flagami.',
+      text: '',
+      flags: [],
+      result: { title: '', body: '' },
+      conclusion: { title: 'Czas na wnioski', body: '' },
+      remember: null,
+    }),
+    'exercise-quiz': () => ({
+      instruction: 'Zaznacz prawidłową odpowiedź.',
+      question: '',
+      image: null,
+      options: [],
       remember: null,
     }),
   }
@@ -251,7 +475,7 @@ function checkText(
 }
 
 // Messenger error keys are id-based (the tree has no stable index paths):
-//   conversation: `avatar`, `node.<id>.message`, `node.<id>.options`, `option.<id>.text`
+//   conversation: `node.<id>.message`, `node.<id>.options`, `option.<id>.text`
 //   explanations: `option.<id>.explanation.*`, `node.<id>.conclusion.*`
 export const MESSENGER_EXPLANATION_KEY = /\.(explanation|conclusion)\./
 
@@ -292,8 +516,6 @@ export function validateMessengerConclusion(nodeId: string, c: MessengerConclusi
 function validateMessenger(config: ExerciseMessengerConfig): ValidationErrors {
   const L = MODULE_LIMITS.messenger
   const errors: ValidationErrors = {}
-
-  if (!config.avatar) errors.avatar = 'Wybierz postać rozmówcy.'
 
   const visit = (node: MessengerNode, depth: number, isRoot: boolean) => {
     checkText(errors, `node.${node.id}.message`, node.message, L.message, 'Wiadomość rozmówcy')
@@ -350,12 +572,210 @@ function validateContrast(config: KnowledgeBehavioralContrastConfig): Validation
   return errors
 }
 
+// Poll error keys: `question`, `options`, `option.<id>.text`
+function validatePoll(config: ExercisePollConfig): ValidationErrors {
+  const L = MODULE_LIMITS.poll
+  const errors: ValidationErrors = {}
+
+  checkText(errors, 'question', config.question, L.question, 'Treść pytania')
+  if (config.options.length < L.minOptions || config.options.length > L.maxOptions) {
+    errors.options = `Sondaż musi mieć od ${L.minOptions} do ${L.maxOptions} odpowiedzi.`
+  }
+  for (const opt of config.options) {
+    checkText(errors, `option.${opt.id}.text`, opt.text, L.option, 'Treść odpowiedzi')
+  }
+  return errors
+}
+
+// Step-exercise error keys (thought-record, i-message):
+//   content:        block-specific top-level keys, `hint.*`, `steps`,
+//                   `step.<id>.{title,subtitle,options}`, `option.<id>.{label,description}`
+//   interpretation: `option.<id>.explanation`, `<variant>.{result,explanation,conclusion}.*`
+//                   where <variant> = success | failure
+export const STEP_EXERCISE_INTERPRETATION_KEY = /^(success|failure)\.|\.explanation$/
+
+function validateHint(errors: ValidationErrors, hint: ContrastNoteCard | null) {
+  const L = MODULE_LIMITS.steps
+  if (!hint) return
+  checkText(errors, 'hint.title', hint.title, L.hintTitle, 'Tytuł wskazówki')
+  checkText(errors, 'hint.text', hint.text, L.hintText, 'Treść wskazówki')
+}
+
+function validateChoiceSteps(errors: ValidationErrors, steps: ChoiceStep[]) {
+  const L = MODULE_LIMITS.steps
+  for (const step of steps) {
+    checkText(errors, `step.${step.id}.title`, step.title, L.stepTitle, 'Treść kroku')
+    checkText(errors, `step.${step.id}.subtitle`, step.subtitle, L.stepSubtitle, 'Podopis kroku')
+    if (step.options.length < L.minOptions || step.options.length > L.maxOptions) {
+      errors[`step.${step.id}.options`] = `Krok musi mieć od ${L.minOptions} do ${L.maxOptions} odpowiedzi.`
+    } else if (step.options.filter(o => o.is_correct).length !== 1) {
+      errors[`step.${step.id}.options`] = 'Zaznacz jedną prawidłową odpowiedź.'
+    }
+    for (const opt of step.options) {
+      checkText(errors, `option.${opt.id}.label`, opt.label, L.optionLabel, 'Treść odpowiedzi')
+      checkText(errors, `option.${opt.id}.description`, opt.description, L.optionDescription, 'Opis odpowiedzi', false)
+      checkText(errors, `option.${opt.id}.explanation`, opt.explanation, L.optionExplanation, 'Wyjaśnienie odpowiedzi')
+    }
+  }
+}
+
+/** Result, explanation and the short part of the conclusion (both variants). */
+function validateOutcome(errors: ValidationErrors, variant: 'success' | 'failure', outcome: ExerciseOutcome<ShortConclusion>) {
+  const L = MODULE_LIMITS.steps
+  const p = variant
+  checkText(errors, `${p}.result.title`, outcome.result.title, L.resultTitle, 'Nagłówek')
+  checkText(errors, `${p}.result.body`, outcome.result.body, L.resultBody, 'Wstęp')
+  checkText(errors, `${p}.explanation.title`, outcome.explanation.title, L.explTitle, 'Nagłówek wyjaśnienia')
+  checkText(errors, `${p}.explanation.body`, outcome.explanation.body, L.explBody, 'Treść wyjaśnienia')
+
+  const c = outcome.conclusion
+  checkText(errors, `${p}.conclusion.title`, c.title, L.conclusionTitle, 'Nagłówek')
+  checkText(errors, `${p}.conclusion.body`, c.body, L.conclusionBody, 'Rozwinięcie')
+  if (c.remember) {
+    checkText(errors, `${p}.conclusion.remember.title`, c.remember.title, L.widgetTitle, 'Tytuł widżetu')
+    checkText(errors, `${p}.conclusion.remember.lead`, c.remember.lead, L.rememberLead, 'Wyróżnione zdanie')
+    checkText(errors, `${p}.conclusion.remember.text`, c.remember.text, L.rememberText, 'Treść widżetu')
+  }
+}
+
+function validateReasons(errors: ValidationErrors, reasons: { title: string; points: string[] }) {
+  const L = MODULE_LIMITS.steps
+  checkText(errors, 'failure.conclusion.reasons.title', reasons.title, L.widgetTitle, 'Nagłówek')
+  if (reasons.points.length < L.minReasons || reasons.points.length > L.maxReasons) {
+    errors['failure.conclusion.reasons.points'] = `Od ${L.minReasons} do ${L.maxReasons} podpunktów.`
+  }
+  reasons.points.forEach((p, i) => checkText(errors, `failure.conclusion.reasons.points.${i}`, p, L.reason, 'Podpunkt'))
+}
+
+function validateThoughtRecord(config: ExerciseThoughtRecordConfig): ValidationErrors {
+  const L = MODULE_LIMITS.thoughtRecord
+  const errors: ValidationErrors = {}
+
+  checkText(errors, 'situation', config.situation, L.situation, 'Obraz sytuacji')
+  validateHint(errors, config.hint)
+  if (config.steps.length < L.minSteps || config.steps.length > L.maxSteps) {
+    errors.steps = `Ćwiczenie musi mieć od ${L.minSteps} do ${L.maxSteps} kroków.`
+  }
+  validateChoiceSteps(errors, config.steps)
+
+  validateOutcome(errors, 'success', config.success)
+  validateOutcome(errors, 'failure', config.failure)
+
+  // Failure-only part of the conclusion
+  const c = config.failure.conclusion
+  checkText(errors, 'failure.conclusion.reaction.title', c.reaction.title, MODULE_LIMITS.steps.widgetTitle, 'Nagłówek widżetu')
+  if (c.reaction.steps.length < L.minReactionSteps || c.reaction.steps.length > L.maxReactionSteps) {
+    errors['failure.conclusion.reaction.steps'] = `Od ${L.minReactionSteps} do ${L.maxReactionSteps} etapów reakcji.`
+  }
+  c.reaction.steps.forEach((s, i) => {
+    checkText(errors, `failure.conclusion.reaction.steps.${i}.title`, s.title, L.reactionStepTitle, 'Nazwa etapu')
+    checkText(errors, `failure.conclusion.reaction.steps.${i}.text`, s.text, L.reactionStepText, 'Opis etapu')
+  })
+  validateReasons(errors, c.reasons)
+
+  return errors
+}
+
+function validateIMessage(config: ExerciseIMessageConfig): ValidationErrors {
+  const L = MODULE_LIMITS.iMessage
+  const errors: ValidationErrors = {}
+
+  checkText(errors, 'context.title', config.context.title, L.contextTitle, 'Kontekst wiadomości')
+  checkText(errors, 'context.body', config.context.body, L.contextBody, 'Opis kontekstu')
+  checkText(errors, 'partner_message', config.partner_message, L.partnerMessage, 'Wiadomość partnera')
+  validateHint(errors, config.hint)
+  if (config.steps.length !== L.steps) errors.steps = `Ćwiczenie musi mieć dokładnie ${L.steps} kroki.`
+  validateChoiceSteps(errors, config.steps)
+
+  validateOutcome(errors, 'success', config.success)
+  validateOutcome(errors, 'failure', config.failure)
+  checkText(errors, 'failure.conclusion.better_title', config.failure.conclusion.better_title, MODULE_LIMITS.steps.widgetTitle, 'Nagłówek widżetu')
+  validateReasons(errors, config.failure.conclusion.reasons)
+
+  return errors
+}
+
+// Pattern-detector error keys:
+//   content:        `title`, `subtitle`, `text`, `flags`
+//   interpretation: `result.*`, `flag.<id>.{title,explanation}`, `conclusion.*`, `remember.*`
+export const PATTERN_INTERPRETATION_KEY = /^(result|flag|conclusion|remember)\./
+
+function validatePatternDetector(config: ExercisePatternDetectorConfig): ValidationErrors {
+  const L = MODULE_LIMITS.patternDetector
+  const errors: ValidationErrors = {}
+
+  checkText(errors, 'title', config.title, L.title, 'Nagłówek')
+  checkText(errors, 'subtitle', config.subtitle, L.subtitle, 'Podtytuł')
+  checkText(errors, 'text', config.text, L.text, 'Treść wypowiedzi')
+  if (config.flags.length === 0) errors.flags = 'Zaznacz w wypowiedzi co najmniej jedną red lub green flagę.'
+  else if (config.flags.length > L.maxFlags) errors.flags = `Maksymalnie ${L.maxFlags} zaznaczonych fragmentów.`
+
+  checkText(errors, 'result.title', config.result.title, L.resultTitle, 'Nagłówek')
+  checkText(errors, 'result.body', config.result.body, L.resultBody, 'Podtytuł')
+  for (const flag of config.flags) {
+    checkText(errors, `flag.${flag.id}.title`, flag.title, L.flagTitle, 'Nazwa sygnału')
+    checkText(errors, `flag.${flag.id}.explanation`, flag.explanation, L.explanation, 'Wyjaśnienie')
+  }
+  checkText(errors, 'conclusion.title', config.conclusion.title, L.conclusionTitle, 'Nagłówek')
+  checkText(errors, 'conclusion.body', config.conclusion.body, L.conclusionBody, 'Treść wniosków')
+  if (config.remember) {
+    checkText(errors, 'remember.title', config.remember.title, L.rememberTitle, 'Tytuł karty')
+    checkText(errors, 'remember.text', config.remember.text, L.rememberText, 'Treść karty')
+  }
+  return errors
+}
+
+const COUNT_WORDS: Record<number, string> = { 2: 'dwie', 3: 'trzy', 4: 'cztery', 5: 'pięć' }
+
+/** Quiz hint under the question — shown only when more than one answer is correct. */
+export function quizSelectionHint(correctCount: number): string | null {
+  return correctCount > 1 ? `Możesz zaznaczyć maksymalnie ${COUNT_WORDS[correctCount] ?? correctCount} odpowiedzi` : null
+}
+
+// Quiz error keys: content `question`, `options`, `option.<id>.text`;
+// interpretation `option.<id>.explanation`, `remember.*`
+export const QUIZ_INTERPRETATION_KEY = /\.explanation$|^remember\./
+
+function validateQuiz(config: ExerciseQuizConfig): ValidationErrors {
+  const L = MODULE_LIMITS.quiz
+  const errors: ValidationErrors = {}
+
+  checkText(errors, 'instruction', config.instruction, L.instruction, 'Polecenie')
+  checkText(errors, 'question', config.question, L.question, 'Treść pytania')
+  if (config.options.length < L.minOptions || config.options.length > L.maxOptions) {
+    errors.options = `Quiz musi mieć od ${L.minOptions} do ${L.maxOptions} odpowiedzi.`
+  } else if (!config.options.some(o => o.is_correct)) {
+    errors.options = 'Zaznacz co najmniej jedną prawidłową odpowiedź.'
+  } else if (config.options.every(o => o.is_correct)) {
+    errors.options = 'Co najmniej jedna odpowiedź musi być nieprawidłowa.'
+  }
+  for (const opt of config.options) {
+    checkText(errors, `option.${opt.id}.text`, opt.text, L.option, 'Treść odpowiedzi')
+    checkText(errors, `option.${opt.id}.explanation`, opt.explanation, L.explanation, 'Wyjaśnienie')
+  }
+  if (config.remember) {
+    checkText(errors, 'remember.title', config.remember.title, L.rememberTitle, 'Tytuł karty')
+    checkText(errors, 'remember.text', config.remember.text, L.rememberText, 'Treść karty')
+  }
+  return errors
+}
+
 export function validateView(view: ModuleView): ValidationErrors {
   switch (view.block_type) {
     case 'exercise-messenger':
       return validateMessenger(view.config)
     case 'knowledge-behavioral-contrast':
       return validateContrast(view.config)
+    case 'exercise-poll':
+      return validatePoll(view.config)
+    case 'exercise-thought-record':
+      return validateThoughtRecord(view.config)
+    case 'exercise-i-message':
+      return validateIMessage(view.config)
+    case 'exercise-pattern-detector':
+      return validatePatternDetector(view.config)
+    case 'exercise-quiz':
+      return validateQuiz(view.config)
   }
 }
 
@@ -368,7 +788,7 @@ export function validateFlowContent(flow: ModuleFlowData): FlowIssue[] {
     .filter(issue => Object.keys(issue.errors).length > 0)
 }
 
-const KNOWN_BLOCK_TYPES: readonly string[] = ['exercise-messenger', 'knowledge-behavioral-contrast']
+const KNOWN_BLOCK_TYPES: readonly string[] = ['exercise-messenger', 'knowledge-behavioral-contrast', 'exercise-poll', 'exercise-thought-record', 'exercise-i-message', 'exercise-pattern-detector', 'exercise-quiz']
 
 /**
  * Structural validation (used before every save). Drafts may hold incomplete

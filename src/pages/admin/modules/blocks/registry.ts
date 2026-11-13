@@ -1,26 +1,23 @@
 import type { ComponentType } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import {
-  Flag,
-  Headphones,
-  Layers,
-  ListChecks,
-  MessageCircle,
-  Puzzle,
-  Scale,
-  ShieldHalf,
-  Sparkles,
-  TextQuote,
-  Users,
-  WandSparkles,
-} from 'lucide-react'
+import { Flag, ListChecks, MessageCircle, Puzzle, Scale, Sparkles, TextQuote, Users } from 'lucide-react'
 import type { BlockConfigMap, BlockType } from '../../../../types/modules'
 import type { BaseModalProps } from '../../../../components/ui/popups/BaseModal'
 import type { BlockFormProps } from './fields'
 import { MessengerForm } from './messenger/MessengerForm'
 import { ContrastForm } from './contrast/ContrastForm'
 import { ContrastSummary } from './contrast/ContrastSummary'
-import { MessengerSummary } from './summaries'
+import { MessengerSummary } from './messenger/MessengerSummary'
+import { PollForm } from './poll/PollForm'
+import { PollSummary } from './poll/PollSummary'
+import { ThoughtRecordForm } from './thought-record/ThoughtRecordForm'
+import { ThoughtRecordSummary } from './thought-record/ThoughtRecordSummary'
+import { IMessageForm } from './i-message/IMessageForm'
+import { IMessageSummary } from './i-message/IMessageSummary'
+import { PatternDetectorForm } from './pattern-detector/PatternDetectorForm'
+import { PatternDetectorSummary } from './pattern-detector/PatternDetectorSummary'
+import { QuizForm } from './quiz/QuizForm'
+import { QuizSummary } from './quiz/QuizSummary'
 
 // ============================================================
 // Block registry — single place that wires a block type to its admin UI.
@@ -77,6 +74,61 @@ export const BLOCK_REGISTRY: Record<BlockType, AnyBlockDefinition> = {
     Form: MessengerForm,
     Summary: MessengerSummary,
   }),
+  'exercise-poll': defineBlock({
+    type: 'exercise-poll',
+    label: 'Sondaż użytkowników',
+    description: 'Zbieranie opinii społeczności',
+    icon: Users,
+    color: '#2B8A9A',
+    category: 'exercise',
+    modalWidth: 'lg',
+    Form: PollForm,
+    Summary: PollSummary,
+  }),
+  'exercise-thought-record': defineBlock({
+    type: 'exercise-thought-record',
+    label: 'Dziennik Myśli ABC',
+    description: 'Analiza sytuacji krok po kroku (CBT, Gottman)',
+    icon: Puzzle,
+    color: '#2B6E78',
+    category: 'exercise',
+    modalWidth: 'xl',
+    Form: ThoughtRecordForm,
+    Summary: ThoughtRecordSummary,
+  }),
+  'exercise-i-message': defineBlock({
+    type: 'exercise-i-message',
+    label: 'Kreator Komunikatu JA',
+    description: 'Odpowiedź w 4 krokach NVC',
+    icon: Sparkles,
+    color: '#C27C2C',
+    category: 'exercise',
+    modalWidth: 'xl',
+    Form: IMessageForm,
+    Summary: IMessageSummary,
+  }),
+  'exercise-pattern-detector': defineBlock({
+    type: 'exercise-pattern-detector',
+    label: 'Detektor Wzorców',
+    description: 'Red i Green Flags',
+    icon: Flag,
+    color: '#E0484F',
+    category: 'exercise',
+    modalWidth: 'xl',
+    Form: PatternDetectorForm,
+    Summary: PatternDetectorSummary,
+  }),
+  'exercise-quiz': defineBlock({
+    type: 'exercise-quiz',
+    label: 'Quiz',
+    description: 'Jedno pytanie, max 6 odpowiedzi',
+    icon: ListChecks,
+    color: '#4C7FD1',
+    category: 'exercise',
+    modalWidth: 'lg',
+    Form: QuizForm,
+    Summary: QuizSummary,
+  }),
 }
 
 export function getBlockDefinition(type: BlockType): AnyBlockDefinition {
@@ -87,16 +139,7 @@ export function getBlockDefinition(type: BlockType): AnyBlockDefinition {
 export type PlannedBlock = { label: string; description: string; icon: LucideIcon; category: BlockCategory }
 
 export const PLANNED_BLOCKS: PlannedBlock[] = [
-  { label: 'Media Card', description: 'Obraz / wideo', icon: Headphones, category: 'knowledge' },
   { label: 'Concept Text', description: 'Krótki tekst, max 300 znaków', icon: TextQuote, category: 'knowledge' },
-  { label: 'Story Flow / Stories', description: 'Pełnoekranowe plansze', icon: Layers, category: 'knowledge' },
-  { label: 'Quiz', description: 'Jedno pytanie, max 6 odpowiedzi', icon: ListChecks, category: 'exercise' },
-  { label: 'Sondaż użytkowników', description: 'Zbieranie opinii społeczności', icon: Users, category: 'exercise' },
-  { label: 'Restrukturyzacja Poznawcza', description: 'Analiza myśli automatycznych', icon: Puzzle, category: 'exercise' },
-  { label: 'Kreator Komunikatu JA', description: 'Budowanie wypowiedzi w 4 krokach', icon: Sparkles, category: 'exercise' },
-  { label: 'Detektor Wzorców', description: 'Red i Green Flags', icon: Flag, category: 'exercise' },
-  { label: 'Dialog z Krytykiem', description: 'Rozbrajanie lęku (IFS)', icon: ShieldHalf, category: 'exercise' },
-  { label: 'Tinder Swipe', description: 'Wiele pytań, dwie odpowiedzi', icon: WandSparkles, category: 'exercise' },
 ]
 
 export const CATEGORY_LABELS: Record<BlockCategory, string> = {

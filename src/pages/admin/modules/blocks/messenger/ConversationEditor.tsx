@@ -1,13 +1,12 @@
-import { useState } from 'react'
-import { ArrowLeftRight, Check, MessageCircleMore, Plus, UserRound, X } from 'lucide-react'
-import type { ExerciseMessengerConfig, MessengerAvatar, MessengerNode, MessengerOption } from '../../../../../types/modules'
+import { Check, MessageCircleMore, Plus, X } from 'lucide-react'
+import type { ExerciseMessengerConfig, MessengerNode, MessengerOption } from '../../../../../types/modules'
 import { MODULE_LIMITS, createMessengerOptions } from '../../../../../utils/moduleFlow'
 import type { ValidationErrors } from '../../../../../utils/moduleFlow'
 import { replaceAt } from '../../../../../utils/arrays'
 import { InlineText } from '../fields'
 import type { BlockFormProps } from '../fields'
-import { AVATARS, CONTACT_BUBBLE, MSG_GREEN as GREEN, MSG_TEAL as TEAL } from './theme'
-import { PhoneFrame } from './MessengerFrame'
+import { CONTACT_BUBBLE, MSG_GREEN as GREEN, MSG_TEAL as TEAL } from './theme'
+import { AvatarCircle, PhoneFrame } from './MessengerFrame'
 
 // Tab "Treść ćwiczenia": mirrors the mobile chat screen (mockup "Etap 4 ·
 // Rozmowa"). The conversation is a tree: the contact's message → 3 answers →
@@ -17,11 +16,7 @@ import { PhoneFrame } from './MessengerFrame'
 const L = MODULE_LIMITS.messenger
 
 export function ConversationEditor({ config, onChange, errors }: BlockFormProps<ExerciseMessengerConfig>) {
-  const ctx: TreeContext = {
-    avatar: config.avatar,
-    errors,
-    onAvatarChange: avatar => onChange({ ...config, avatar }),
-  }
+  const ctx: TreeContext = { errors }
 
   return (
     <PhoneFrame>
@@ -44,9 +39,7 @@ export function ConversationEditor({ config, onChange, errors }: BlockFormProps<
 // --- Tree ---
 
 type TreeContext = {
-  avatar: MessengerAvatar | null
   errors: ValidationErrors
-  onAvatarChange: (avatar: MessengerAvatar) => void
 }
 
 type NodeEditorProps = {
@@ -190,52 +183,10 @@ type ContactMessageProps = {
 }
 
 function ContactMessage({ node, ctx, isRoot, onChange }: ContactMessageProps) {
-  const [isPicking, setIsPicking] = useState(false)
-  const avatar = ctx.avatar
-  const bubbleClass = `w-[78%] ${CONTACT_BUBBLE}`
-
-  // Before anything else the first bubble asks for the character.
-  if (isRoot && !avatar) {
-    return (
-      <div className="flex items-start gap-2.5">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-full border-2 border-dashed border-dark/20 text-[13px] font-bold text-dark/35">
-          ?
-        </div>
-        <div className={`${bubbleClass} ${ctx.errors.avatar ? 'border-[#E7B2B9] bg-red-50' : ''}`}>
-          {isPicking ? (
-            <div className="flex flex-col gap-2">
-              <span className="text-dark/60">Kto pisze w tej rozmowie?</span>
-              <div className="flex gap-2">
-                {(Object.keys(AVATARS) as MessengerAvatar[]).map(key => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => ctx.onAvatarChange(key)}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-[8px] border border-gray/50 bg-white px-3 py-2 font-semibold hover:border-dark/30 cursor-pointer"
-                  >
-                    <span className="flex size-6 items-center justify-center rounded-full" style={{ backgroundColor: AVATARS[key].bg, color: AVATARS[key].color }}>
-                      <UserRound className="size-3.5" />
-                    </span>
-                    {AVATARS[key].label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <button type="button" onClick={() => setIsPicking(true)} className="w-full text-left font-semibold cursor-pointer" style={{ color: TEAL }}>
-              Wybierz postać
-            </button>
-          )}
-          {ctx.errors.avatar && !isPicking && <span className="mt-1 block text-[11px] text-[#C03448]">{ctx.errors.avatar}</span>}
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="flex items-start gap-2.5">
-      <Avatar avatar={avatar} onChange={ctx.onAvatarChange} />
-      <div className={bubbleClass}>
+      <AvatarCircle />
+      <div className={`w-[78%] ${CONTACT_BUBBLE}`}>
         <InlineText
           value={node.message}
           onChange={onChange}
@@ -245,28 +196,6 @@ function ContactMessage({ node, ctx, isRoot, onChange }: ContactMessageProps) {
         />
       </div>
     </div>
-  )
-}
-
-/** Placeholder avatar; hover shows the swap badge, click swaps female ↔ male. */
-function Avatar({ avatar, onChange }: { avatar: MessengerAvatar | null; onChange: (a: MessengerAvatar) => void }) {
-  const current = avatar ?? 'female'
-  const style = AVATARS[current]
-  const other: MessengerAvatar = current === 'female' ? 'male' : 'female'
-
-  return (
-    <button
-      type="button"
-      title={`Zmień postać na: ${AVATARS[other].label.toLowerCase()}`}
-      onClick={() => onChange(other)}
-      className="group relative flex size-9 shrink-0 items-center justify-center rounded-full transition-shadow hover:ring-2 hover:ring-dark/20 cursor-pointer disabled:cursor-default disabled:hover:ring-0"
-      style={{ backgroundColor: style.bg, color: style.color }}
-    >
-      <UserRound className="size-[18px]" />
-      <span className="absolute -bottom-1 -right-1 flex size-4 items-center justify-center rounded-full bg-white text-dark shadow opacity-0 transition-opacity group-hover:opacity-100 group-disabled:hidden">
-        <ArrowLeftRight className="size-2.5" />
-      </span>
-    </button>
   )
 }
 
