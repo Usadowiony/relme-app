@@ -45,6 +45,13 @@ CREATE POLICY "media_assets_delete_admin" ON public.media_assets AS PERMISSIVE F
 CREATE POLICY "module_drafts_admin_select" ON public.module_drafts AS PERMISSIVE FOR SELECT TO public
   USING (has_role('admin'::app_role));
 
+-- ---------- module_poll_votes ----------
+-- Read: own vote + admin. No INSERT/UPDATE/DELETE policies (writes only via cast_poll_vote).
+CREATE POLICY "module_poll_votes_owner_select" ON public.module_poll_votes AS PERMISSIVE FOR SELECT TO public
+  USING ((user_id = auth.uid()));
+CREATE POLICY "module_poll_votes_admin_select" ON public.module_poll_votes AS PERMISSIVE FOR SELECT TO public
+  USING (has_role('admin'::app_role));
+
 -- ---------- module_progress ----------
 CREATE POLICY "module_progress_admin_select" ON public.module_progress AS PERMISSIVE FOR SELECT TO public
   USING (has_role('admin'::app_role));

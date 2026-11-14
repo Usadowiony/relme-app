@@ -208,6 +208,18 @@ COMMENT ON TABLE public.module_progress IS 'Postęp użytkownika w danym module 
 COMMENT ON COLUMN public.module_progress.current_node_id IS 'Id of the current view in module_versions.flow_data.views.';
 COMMENT ON COLUMN public.module_progress.module_version_id IS 'Version the user goes through; kept when a newer version is published.';
 
+-- Poll votes (T6): one vote per user per poll view; written only via cast_poll_vote.
+CREATE TABLE public.module_poll_votes (
+  user_id uuid NOT NULL,
+  module_id uuid NOT NULL,
+  view_id text NOT NULL,
+  option_id text NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now()
+);
+COMMENT ON TABLE public.module_poll_votes IS 'Głosy w Sondażu użytkowników (exercise-poll): jeden na użytkownika na widok sondażu.';
+COMMENT ON COLUMN public.module_poll_votes.view_id IS 'Id of the poll view in module_versions.flow_data.views.';
+COMMENT ON COLUMN public.module_poll_votes.option_id IS 'Id of the picked option in the view config.options (stable across versions).';
+
 -- ---------- Row Level Security (enabled on every table) ----------
 ALTER TABLE public.profiles           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_roles         ENABLE ROW LEVEL SECURITY;
@@ -227,12 +239,14 @@ ALTER TABLE public.modules            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.module_drafts      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.module_versions    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.module_progress    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.module_poll_votes  ENABLE ROW LEVEL SECURITY;
 
 -- ---------- Primary keys ----------
 ALTER TABLE public.answer_tags ADD CONSTRAINT answer_tags_pkey PRIMARY KEY (answer_id, tag_id);
 ALTER TABLE public.answers ADD CONSTRAINT answers_pkey PRIMARY KEY (id);
 ALTER TABLE public.media_assets ADD CONSTRAINT media_assets_pkey PRIMARY KEY (id);
 ALTER TABLE public.module_drafts ADD CONSTRAINT module_drafts_pkey PRIMARY KEY (module_id);
+ALTER TABLE public.module_poll_votes ADD CONSTRAINT module_poll_votes_pkey PRIMARY KEY (user_id, module_id, view_id);
 ALTER TABLE public.module_progress ADD CONSTRAINT module_progress_pkey PRIMARY KEY (id);
 ALTER TABLE public.module_versions ADD CONSTRAINT module_versions_pkey PRIMARY KEY (id);
 ALTER TABLE public.modules ADD CONSTRAINT modules_pkey PRIMARY KEY (id);
@@ -277,6 +291,8 @@ ALTER TABLE public.answers ADD CONSTRAINT answers_question_id_fkey FOREIGN KEY (
 ALTER TABLE public.answers ADD CONSTRAINT answers_target_path_id_fkey FOREIGN KEY (target_path_id) REFERENCES public.quiz_paths(id) ON DELETE CASCADE;
 ALTER TABLE public.module_drafts ADD CONSTRAINT module_drafts_module_id_fkey FOREIGN KEY (module_id) REFERENCES public.modules(id) ON DELETE CASCADE;
 ALTER TABLE public.module_drafts ADD CONSTRAINT module_drafts_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES auth.users(id) ON DELETE SET NULL;
+ALTER TABLE public.module_poll_votes ADD CONSTRAINT module_poll_votes_module_id_fkey FOREIGN KEY (module_id) REFERENCES public.modules(id) ON DELETE CASCADE;
+ALTER TABLE public.module_poll_votes ADD CONSTRAINT module_poll_votes_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 ALTER TABLE public.module_progress ADD CONSTRAINT module_progress_module_id_fkey FOREIGN KEY (module_id) REFERENCES public.modules(id) ON DELETE CASCADE;
 ALTER TABLE public.module_progress ADD CONSTRAINT module_progress_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 ALTER TABLE public.module_progress ADD CONSTRAINT module_progress_version_fkey FOREIGN KEY (module_version_id, module_id) REFERENCES public.module_versions(id, module_id) ON DELETE RESTRICT;
@@ -301,6 +317,7 @@ ALTER TABLE public.user_quiz_status ADD CONSTRAINT user_quiz_status_user_id_fkey
 ALTER TABLE public.user_roles ADD CONSTRAINT user_roles_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 -- ---------- Indexes (other than PK / unique constraints) ----------
+CREATE INDEX module_poll_votes_view_idx ON public.module_poll_votes USING btree (module_id, view_id, option_id);
 CREATE INDEX module_versions_module_id_idx ON public.module_versions USING btree (module_id);
 -- At most one live quiz version.
 CREATE UNIQUE INDEX quiz_versions_single_live ON public.quiz_versions USING btree ((true)) WHERE (status = 'live'::text);

@@ -802,6 +802,87 @@ BEGIN
 END;
 $function$;
 
+-- ---------- Poll RPCs (T6) ----------
+-- Poll results
+-- Zwraca: { "total": 1150, "my_option_id": "abc" | null, "counts": { "<option_id>": 140, ... } }
+CREATE OR REPLACE FUNCTION public.get_poll_results(p_module_id uuid, p_view_id text)
+ RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_user uuid := auth.uid();
+BEGIN
+  IF v_user IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated' USING ERRCODE = '42501';
+  END IF;
+
+  RETURN jsonb_build_object(
+    'total', (
+      SELECT count(*) FROM public.module_poll_votes
+      WHERE module_id = p_module_id AND view_id = p_view_id
+    ),
+    'my_option_id', (
+      SELECT option_id FROM public.module_poll_votes
+      WHERE module_id = p_module_id AND view_id = p_view_id AND user_id = v_user
+    ),
+    'counts', COALESCE((
+      SELECT jsonb_object_agg(c.option_id, c.votes)
+      FROM (
+        SELECT option_id, count(*) AS votes
+        FROM public.module_poll_votes
+        WHERE module_id = p_module_id AND view_id = p_view_id
+        GROUP BY option_id
+      ) c
+    ), '{}'::jsonb)
+  );
+END;
+$function$;
+
+-- Casting a vote
+-- Opcja musi istnieć w sondażu z wersji, którą użytkownik może przechodzić:
+-- aktualnej live albo przypiętej w jego postępie. Drugi głos na ten sam widok
+-- jest ignorowany (liczy się pierwszy). Zwraca wyniki jak get_poll_results.
+CREATE OR REPLACE FUNCTION public.cast_poll_vote(p_module_id uuid, p_view_id text, p_option_id text)
+ RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_user uuid := auth.uid();
+BEGIN
+  IF v_user IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated' USING ERRCODE = '42501';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.module_versions mv
+    WHERE mv.module_id = p_module_id
+      AND mv.id IN (
+        SELECT m.live_version_id FROM public.modules m WHERE m.id = p_module_id
+        UNION
+        SELECT p.module_version_id FROM public.module_progress p
+        WHERE p.module_id = p_module_id AND p.user_id = v_user
+      )
+      AND jsonb_path_exists(
+        mv.flow_data,
+        '$.views[*] ? (@.id == $view && @.block_type == "exercise-poll").config.options[*] ? (@.id == $option)',
+        jsonb_build_object('view', p_view_id, 'option', p_option_id)
+      )
+  ) THEN
+    RAISE EXCEPTION 'Unknown poll option' USING ERRCODE = '22023';
+  END IF;
+
+  INSERT INTO public.module_poll_votes (user_id, module_id, view_id, option_id)
+  VALUES (v_user, p_module_id, p_view_id, p_option_id)
+  ON CONFLICT (user_id, module_id, view_id) DO NOTHING;
+
+  RETURN public.get_poll_results(p_module_id, p_view_id);
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.get_poll_results(uuid, text) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.cast_poll_vote(uuid, text, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_poll_results(uuid, text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.cast_poll_vote(uuid, text, text) TO authenticated;
+
 -- ---------- Event trigger function: auto-enable RLS on new public tables ----------
 -- (Supabase default; the event trigger itself is created by the platform.)
 CREATE OR REPLACE FUNCTION public.rls_auto_enable()
