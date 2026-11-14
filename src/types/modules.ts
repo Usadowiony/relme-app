@@ -28,13 +28,15 @@ export type BlockType =
 // Chat simulation as a tree of scenarios. The fixed header "Przeczytaj
 // rozmowę i wybierz najlepszą odpowiedź." is UI, not data.
 // The contact's avatar is not data: the app picks it from the user's gender.
-// Playback: the contact writes `root.message`; the user picks one of
-// exactly 3 options; the contact answers with `option.next.message`; if that
-// node has options the user picks again, and so on until a node without
-// options. Then "Sprawdź odpowiedź": every pick on the path correct → next
-// view, otherwise "Spróbuj ponownie" (restart). "Sprawdź dlaczego" opens the
-// explanation sub-view: for every pick on the path the contact's message,
-// the picked answer and that option's `explanation`; then the `conclusion`
+// Playback: the contact writes `root.message`; the user selects one of
+// exactly 3 options and sends it ("Wyślij"); the contact answers with
+// `option.next.message`; if that node has options the user picks again, and
+// so on until a node without options. A moment after the last reply the
+// verdict appears: every pick on the path correct → "Następna strona",
+// otherwise "Spróbuj ponownie" (restart). "Sprawdź dlaczego" opens the
+// explanation sub-view: the `result` header of the matching variant, then for
+// every pick on the path the contact's message, the picked answer and that
+// option's `explanation`; then — only after a wrong path — the `conclusion`
 // of the node where the conversation ended ("Czas na wnioski").
 export type MessengerWidget = {
   kind: 'remember' | 'golden_rule' // "Zapamiętaj" (blue) / "Złota zasada" (amber)
@@ -71,11 +73,13 @@ export type MessengerNode = {
   id: string
   message: string // contact's message
   options: MessengerOption[] // 0 (conversation ends) or exactly 3; root always 3
-  conclusion: MessengerConclusion // used only when the node ends the conversation
+  conclusion: MessengerConclusion // used only when the node ends a path with at least one wrong answer
 }
 
 export type ExerciseMessengerConfig = {
   root: MessengerNode
+  /** Header of the explanation sub-view, per verdict (e.g. "To nie były najlepsze odpowiedzi"). */
+  result: Record<OutcomeVariant, TextBlock>
 }
 
 // --- knowledge-behavioral-contrast ---

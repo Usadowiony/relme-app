@@ -14,7 +14,7 @@ import type {
 import { MODULE_LIMITS } from '../../../../../utils/moduleFlow'
 import type { ValidationErrors } from '../../../../../utils/moduleFlow'
 import { removeAt, replaceAt } from '../../../../../utils/arrays'
-import { AddLink, InlineText, RemoveButton } from '../fields'
+import { AddLink, FormattingHint, InlineText, RemoveButton } from '../fields'
 import { CARD_CLASS, SCREEN_CLASS, TR } from './theme'
 
 // Tab "Interpretacja odpowiedzi" shared by step exercises. Two variants
@@ -72,6 +72,9 @@ export function StepInterpretationEditor<F extends ShortConclusion>(props: Props
 
   return (
     <div className={SCREEN_CLASS} style={{ backgroundColor: TR.screen }}>
+      <div className="mb-3">
+        <FormattingHint />
+      </div>
       {switcher}
 
       <fieldset key={variant} disabled={readOnly} className="mt-4 min-w-0">
@@ -90,6 +93,7 @@ export function StepInterpretationEditor<F extends ShortConclusion>(props: Props
               value={outcome.result.body}
               onChange={body => setText('result', { ...outcome.result, body })}
               maxLength={L.resultBody}
+              rich
               placeholder={variant === 'success' ? texts.successIntro : texts.failureIntro}
               error={e('result.body')}
               className="text-[14px] leading-snug text-dark/80"
@@ -120,6 +124,7 @@ export function StepInterpretationEditor<F extends ShortConclusion>(props: Props
               value={outcome.explanation.body}
               onChange={body => setText('explanation', { ...outcome.explanation, body })}
               maxLength={L.explBody}
+              rich
               placeholder="Wyjaśnij mechanizm, który stoi za tą sytuacją"
               error={e('explanation.body')}
               className="text-[14px] leading-snug text-dark/85"
@@ -313,6 +318,7 @@ function StepAnswers({ step, index, onlyCorrect, errors, readOnly, onChange }: {
               value={option.explanation}
               onChange={explanation => setOption({ ...option, explanation })}
               maxLength={L.optionExplanation}
+              rich
               placeholder={option.is_correct ? 'Dlaczego ta odpowiedź jest trafna?' : 'Dlaczego ta odpowiedź jest błędna?'}
               error={errors[`option.${option.id}.explanation`]}
               className="text-[14px] leading-snug text-dark/85"
@@ -351,6 +357,7 @@ function ConclusionHeader({ conclusion: c, prefix, errors, onChange }: {
           value={c.body}
           onChange={body => onChange({ body })}
           maxLength={L.conclusionBody}
+          rich
           placeholder="Podsumuj, jaki wniosek płynie z tej sytuacji"
           error={errors[`${prefix}.body`]}
           className="text-[14px] leading-snug text-dark/80"
@@ -465,6 +472,7 @@ function RememberCard({ remember, prefix, errors, onChange }: {
             value={remember.text}
             onChange={text => onChange({ ...remember, text })}
             maxLength={L.rememberText}
+            rich
             placeholder="Rozwinięcie"
             error={errors[`${prefix}.text`]}
             className="text-[13px] leading-snug text-dark/80"

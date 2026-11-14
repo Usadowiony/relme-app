@@ -34,6 +34,9 @@ export const MODULE_LIMITS = {
     maxDepth: 4, // max number of choices on one path (scenario 1.2.3.1)
     message: 500,
     optionText: 200,
+    // header of the explanation sub-view, per verdict (success / failure)
+    resultTitle: 80,
+    resultBody: 300,
     // explanation ("Sprawdź dlaczego") per answer
     explTitle: 80,
     explBody: 600,
@@ -191,8 +194,13 @@ function normalizeMessengerConfig(raw: unknown): ExerciseMessengerConfig {
   }
   type RawNode = Omit<Partial<MessengerNode>, 'options'> & { options?: RawOption[] }
   // Older drafts also stored `avatar` — dropped (the app picks it from the user's gender).
-  const r = raw as { root?: RawNode } & {
+  const r = raw as { root?: RawNode; result?: Partial<ExerciseMessengerConfig['result']> } & {
     steps?: { incoming_message?: string; options?: { text?: string; is_correct?: boolean; reply?: string; explanation?: string }[] }[]
+  }
+  // T6: `result` (header of the explanation sub-view) added — older drafts get the defaults.
+  const result: ExerciseMessengerConfig['result'] = {
+    success: r.result?.success ?? defaults.result.success,
+    failure: r.result?.failure ?? defaults.result.failure,
   }
 
   const normalizeNode = (node: RawNode | undefined): MessengerNode => {
@@ -214,11 +222,12 @@ function normalizeMessengerConfig(raw: unknown): ExerciseMessengerConfig {
     }
   }
 
-  if (r.root) return { root: normalizeNode(r.root) }
+  if (r.root) return { root: normalizeNode(r.root), result }
 
   const step = r.steps?.[0]
   if (!step) return defaults
   return {
+    result,
     root: normalizeNode({
       message: step.incoming_message,
       options: createMessengerOptions().map((opt, i) => {
@@ -391,6 +400,10 @@ export function createDefaultConfig<K extends BlockType>(type: K): BlockConfigMa
   const defaults: { [T in BlockType]: () => BlockConfigMap[T] } = {
     'exercise-messenger': () => ({
       root: { ...createMessengerNode(), options: createMessengerOptions() },
+      result: {
+        success: { title: 'To były dobre odpowiedzi', body: '' },
+        failure: { title: 'To nie były najlepsze odpowiedzi', body: '' },
+      },
     }),
     'knowledge-behavioral-contrast': () => ({
       kicker: 'Szybkie przypomnienie:',
@@ -476,8 +489,8 @@ function checkText(
 
 // Messenger error keys are id-based (the tree has no stable index paths):
 //   conversation: `node.<id>.message`, `node.<id>.options`, `option.<id>.text`
-//   explanations: `option.<id>.explanation.*`, `node.<id>.conclusion.*`
-export const MESSENGER_EXPLANATION_KEY = /\.(explanation|conclusion)\./
+//   explanations: `result.<variant>.*`, `option.<id>.explanation.*`, `node.<id>.conclusion.*`
+export const MESSENGER_EXPLANATION_KEY = /^result\.|\.(explanation|conclusion)\./
 
 /** Errors of one answer's "Sprawdź dlaczego" explanation (prefix `option.<id>.explanation`). */
 export function validateMessengerExplanation(optionId: string, e: MessengerExplanation): ValidationErrors {
@@ -517,12 +530,13 @@ function validateMessenger(config: ExerciseMessengerConfig): ValidationErrors {
   const L = MODULE_LIMITS.messenger
   const errors: ValidationErrors = {}
 
-  const visit = (node: MessengerNode, depth: number, isRoot: boolean) => {
+  const visit = (node: MessengerNode, depth: number, isRoot: boolean, pathCorrect: boolean) => {
     checkText(errors, `node.${node.id}.message`, node.message, L.message, 'Wiadomość rozmówcy')
 
     if (node.options.length === 0) {
       if (isRoot) errors[`node.${node.id}.options`] = `Dodaj ${L.optionsPerNode} odpowiedzi.`
-      else Object.assign(errors, validateMessengerConclusion(node.id, node.conclusion))
+      // "Czas na wnioski" exists only for endings reached with at least one wrong answer.
+      else if (!pathCorrect) Object.assign(errors, validateMessengerConclusion(node.id, node.conclusion))
       return
     }
     if (node.options.length !== L.optionsPerNode) {
@@ -537,10 +551,15 @@ function validateMessenger(config: ExerciseMessengerConfig): ValidationErrors {
     for (const opt of node.options) {
       checkText(errors, `option.${opt.id}.text`, opt.text, L.optionText, 'Treść odpowiedzi')
       Object.assign(errors, validateMessengerExplanation(opt.id, opt.explanation))
-      visit(opt.next, depth + 1, false)
+      visit(opt.next, depth + 1, false, pathCorrect && opt.is_correct)
     }
   }
-  visit(config.root, 1, true)
+  visit(config.root, 1, true, true)
+
+  for (const variant of ['success', 'failure'] as const) {
+    checkText(errors, `result.${variant}.title`, config.result[variant].title, L.resultTitle, 'Nagłówek wyniku')
+    checkText(errors, `result.${variant}.body`, config.result[variant].body, L.resultBody, 'Rozwinięcie wyniku')
+  }
 
   return errors
 }

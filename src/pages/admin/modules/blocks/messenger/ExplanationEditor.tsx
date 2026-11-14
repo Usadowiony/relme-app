@@ -8,6 +8,8 @@ import type {
   MessengerNode,
   MessengerOption,
   MessengerWidget,
+  OutcomeVariant,
+  TextBlock,
 } from '../../../../../types/modules'
 import {
   MODULE_LIMITS,
@@ -17,13 +19,14 @@ import {
 } from '../../../../../utils/moduleFlow'
 import type { ValidationErrors } from '../../../../../utils/moduleFlow'
 import { removeAt, replaceAt } from '../../../../../utils/arrays'
-import { AddLink, InlineText, RemoveButton } from '../fields'
+import { AddLink, FormattingHint, InlineText, RemoveButton } from '../fields'
 import { CONTACT_BUBBLE, MSG_GREEN, MSG_RED } from './theme'
 import { AvatarCircle, PhoneFrame } from './MessengerFrame'
 
 // Tab "Interpretacja odpowiedzi": the "Sprawdź dlaczego" screen (mockup).
-// Top: one explanation per answer (any scenario). Bottom: one conclusion
-// ("Czas na wnioski") per ending scenario.
+// Top: the result header per verdict (success / failure). Then one
+// explanation per answer (any scenario). Bottom: one conclusion
+// ("Czas na wnioski") per ending scenario reached with a wrong answer.
 
 const L = MODULE_LIMITS.messenger
 
@@ -31,6 +34,11 @@ const WIDGETS: Record<MessengerWidget['kind'], { label: string; icon: typeof Spa
   remember: { label: 'Zapamiętaj', icon: Sparkles, color: '#3B8FD9', bg: '#EAF4FD' },
   golden_rule: { label: 'Złota zasada', icon: Lightbulb, color: '#E39B2D', bg: '#FFF4E3' },
 }
+
+const RESULT_VARIANTS: { variant: OutcomeVariant; label: string; color: string; placeholder: string }[] = [
+  { variant: 'success', label: 'Odpowiedzi prawidłowe', color: MSG_GREEN, placeholder: 'Np. „Twoje odpowiedzi wspierały partnerkę.”' },
+  { variant: 'failure', label: 'Odpowiedzi błędne', color: MSG_RED, placeholder: 'Np. „Wybrane odpowiedzi nie wspierały Twojej partnerki. Zobacz, co można poprawić.”' },
+]
 
 // --- Tree helpers ---
 
@@ -77,7 +85,10 @@ type ExplanationEditorProps = {
 }
 
 export function ExplanationEditor({ config, onChange, errors, readOnly }: ExplanationEditorProps) {
-  const { answers, endings } = collect(config.root)
+  const tree = collect(config.root)
+  const { answers } = tree
+  // "Czas na wnioski" is shown only after a wrong path — the fully correct ending has none.
+  const endings = tree.endings.filter(e => !e.pathCorrect)
   const [answerId, setAnswerId] = useState<string | null>(null)
   const [endingId, setEndingId] = useState<string | null>(null)
 
@@ -96,8 +107,43 @@ export function ExplanationEditor({ config, onChange, errors, readOnly }: Explan
   const setConclusion = (nodeId: string, conclusion: MessengerConclusion) =>
     onChange({ ...config, root: mapNodes(config.root, n => (n.id === nodeId ? { ...n, conclusion } : n)) })
 
+  const setResult = (variant: OutcomeVariant, value: TextBlock) =>
+    onChange({ ...config, result: { ...config.result, [variant]: value } })
+
   return (
     <div className="flex flex-col gap-8">
+      <FormattingHint />
+
+      <section className="flex flex-col gap-3">
+        <SectionTitle hint="Nagłówek na górze ekranu „Sprawdź dlaczego” – osobno, gdy wszystkie wybory były prawidłowe i gdy choć jeden był błędny.">
+          Nagłówek wyniku
+        </SectionTitle>
+        <fieldset disabled={readOnly} className="grid min-w-0 gap-3 sm:grid-cols-2">
+          {RESULT_VARIANTS.map(({ variant, label, color, placeholder }) => (
+            <div key={variant} className="flex min-w-0 flex-col gap-1.5 rounded-[14px] border-[1.5px] bg-white px-4 py-3" style={{ borderColor: `${color}66` }}>
+              <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color }}>{label}</span>
+              <InlineText
+                value={config.result[variant].title}
+                onChange={title => setResult(variant, { ...config.result[variant], title })}
+                maxLength={L.resultTitle}
+                placeholder="Nagłówek wyniku"
+                error={errors[`result.${variant}.title`]}
+                className="font-manrope text-[17px] font-bold text-dark"
+              />
+              <InlineText
+                value={config.result[variant].body}
+                onChange={body => setResult(variant, { ...config.result[variant], body })}
+                maxLength={L.resultBody}
+                rich
+                placeholder={placeholder}
+                error={errors[`result.${variant}.body`]}
+                className="text-[13px] leading-snug text-dark/80"
+              />
+            </div>
+          ))}
+        </fieldset>
+      </section>
+
       <section className="flex flex-col gap-3">
         <SectionTitle hint="Wyjaśnienie pokazywane na ekranie „Sprawdź dlaczego” dla każdej wybranej odpowiedzi.">
           Wyjaśnienia odpowiedzi
@@ -129,11 +175,11 @@ export function ExplanationEditor({ config, onChange, errors, readOnly }: Explan
       </section>
 
       <section className="flex flex-col gap-3">
-        <SectionTitle hint="Podsumowanie „Czas na wnioski” pokazywane na końcu, osobno dla każdego zakończonego scenariusza.">
+        <SectionTitle hint="Podsumowanie „Czas na wnioski” pokazywane na końcu, osobno dla każdego zakończonego scenariusza z błędną odpowiedzią. Scenariusz z samymi prawidłowymi odpowiedziami nie ma wniosków.">
           Wnioski dla zakończonych scenariuszy
         </SectionTitle>
         {endings.length === 0 ? (
-          <p className="text-[13px] text-dark/50">Brak zakończonych scenariuszy — uzupełnij najpierw treść ćwiczenia.</p>
+          <p className="text-[13px] text-dark/50">Brak zakończonych błędnych scenariuszy — uzupełnij najpierw treść ćwiczenia.</p>
         ) : (
           <div className="flex flex-col gap-1.5">
             {endings.map(e => (
@@ -254,6 +300,7 @@ function AnswerExplanation({ item, errors, onChange }: {
           value={e.body}
           onChange={body => onChange({ ...e, body })}
           maxLength={L.explBody}
+          rich
           placeholder="Rozwinięcie"
           error={errors[`${base}.body`]}
           className="text-[14px] leading-snug text-dark/85"
@@ -352,6 +399,7 @@ function WidgetCard({ widget, errors, base, onChange, onRemove }: {
             value={widget.text}
             onChange={text => onChange({ ...widget, text })}
             maxLength={L.widgetText}
+            rich
             placeholder="Treść widżetu"
             error={errors[`${base}.text`]}
             className="text-[13px] leading-snug text-dark/85"
@@ -388,6 +436,7 @@ function ConclusionEditor({ node, errors, onChange }: {
           value={c.body}
           onChange={body => onChange({ ...c, body })}
           maxLength={L.conclusionBody}
+          rich
           placeholder="Rozwinięcie"
           error={errors[`${base}.body`]}
           className="text-[14px] leading-snug text-dark/85"

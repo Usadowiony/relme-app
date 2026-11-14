@@ -16,6 +16,9 @@ export type BlockFormProps<C> = {
 // --- Preview-style editing ---
 // Text that looks like the mobile UI it edits (font/colour come from
 // `className`), but is an auto-growing single-paragraph textarea.
+// `rich`: longer texts shown on explanation screens — Enter starts a new
+// paragraph and **phrase** is emphasised in the app (see FormattingHint;
+// mobile renders it with ui/RichText).
 
 type InlineTextProps = {
   value: string
@@ -25,9 +28,16 @@ type InlineTextProps = {
   error?: string
   className?: string
   autoFocus?: boolean
+  rich?: boolean
 }
 
-export function InlineText({ value, onChange, maxLength, placeholder, error, className = '', autoFocus }: InlineTextProps) {
+/** Keeps paragraph breaks (one empty line at most); plain fields stay single-line. */
+function normalizeText(value: string, rich: boolean): string {
+  if (!rich) return value.replace(/\s*\n\s*/g, ' ')
+  return value.replace(/[ \t]*\n[ \t]*/g, '\n').replace(/\n{3,}/g, '\n\n')
+}
+
+export function InlineText({ value, onChange, maxLength, placeholder, error, className = '', autoFocus, rich = false }: InlineTextProps) {
   const ref = useRef<HTMLTextAreaElement>(null)
 
   useLayoutEffect(() => {
@@ -48,15 +58,26 @@ export function InlineText({ value, onChange, maxLength, placeholder, error, cla
         placeholder={placeholder}
         title={error}
         onKeyDown={e => {
-          if (e.key === 'Enter') e.preventDefault()
+          if (e.key === 'Enter' && !rich) e.preventDefault()
         }}
-        onChange={e => onChange(e.target.value.replace(/\s*\n\s*/g, ' '))}
+        onChange={e => onChange(normalizeText(e.target.value, rich))}
         className={`block w-full resize-none overflow-hidden bg-transparent outline-none rounded-[8px] px-1.5 -mx-1.5 py-0.5 transition-colors placeholder:text-current placeholder:opacity-35 hover:bg-dark/[0.04] focus:bg-white focus:shadow-[0_0_0_2px_rgba(43,110,120,0.35)] disabled:hover:bg-transparent ${
           error ? 'bg-red-50 shadow-[0_0_0_2px_#E7B2B9]' : ''
         } ${className}`}
       />
       {error && <span className="mt-0.5 text-[11px] font-normal text-[#C03448]">{error}</span>}
     </div>
+  )
+}
+
+/** One-line legend above editors with `rich` fields. */
+export function FormattingHint() {
+  return (
+    <p className="rounded-[10px] bg-[#F2F7F8] px-3 py-2 text-[12px] leading-snug text-dark/70">
+      <b className="font-semibold">Formatowanie w dłuższych tekstach:</b> Enter = nowy akapit,{' '}
+      <code className="rounded bg-white px-1 font-mono text-[11px]">**tekst**</code> = wyróżnienie
+      (w aplikacji pogrubione).
+    </p>
   )
 }
 
