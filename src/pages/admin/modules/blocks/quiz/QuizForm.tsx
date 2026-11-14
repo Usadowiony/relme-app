@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Check, CircleCheck, CircleX, ClipboardList, Image, Plus, Sparkles, Trash2, X } from 'lucide-react'
+import { Check, CircleCheck, CircleX, ClipboardList, Image, Plus, Trash2, X } from 'lucide-react'
 import type { ExerciseQuizConfig, QuizOption } from '../../../../../types/modules'
-import { MODULE_LIMITS, QUIZ_INTERPRETATION_KEY, createContrastNote, createId, quizSelectionHint } from '../../../../../utils/moduleFlow'
+import { MODULE_LIMITS, QUIZ_INTERPRETATION_KEY, createId, quizSelectionHint } from '../../../../../utils/moduleFlow'
+import { CalloutField } from '../callout/CalloutCard'
 import { BlockTabs, InlineText } from '../fields'
 import type { BlockFormProps } from '../fields'
 import { POLL_THEME as T } from '../poll/theme'
@@ -14,7 +15,6 @@ import { POLL_THEME as T } from '../poll/theme'
 const L = MODULE_LIMITS.quiz
 const GREEN = '#3E8E6B'
 const RED = '#E0565B'
-const NOTE = { color: '#3B8FD9', bg: '#EAF4FD' }
 
 type Tab = 'content' | 'interpretation'
 
@@ -195,7 +195,6 @@ function ContentTab({ config, onChange, errors }: Omit<BlockFormProps<ExerciseQu
 function InterpretationTab({ config, onChange, errors, readOnly }: BlockFormProps<ExerciseQuizConfig>) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const option = config.options.find(o => o.id === selectedId) ?? config.options[0]
-  const { remember } = config
 
   const setOption = (opt: QuizOption) => onChange({ ...config, options: config.options.map(o => (o.id === opt.id ? opt : o)) })
 
@@ -266,58 +265,19 @@ function InterpretationTab({ config, onChange, errors, readOnly }: BlockFormProp
         </div>
       </fieldset>
 
-      {/* Optional "Zapamiętaj" (one per quiz, shown under every explanation) */}
+      {/* Optional widget (one per quiz, shown under every explanation) */}
       <fieldset disabled={readOnly} className="mt-3 min-w-0">
-        {remember ? (
-          <div className="group relative overflow-hidden rounded-[16px] p-4 shadow-sm" style={{ backgroundColor: NOTE.bg }}>
-            <div className="pointer-events-none absolute -bottom-8 -right-6 size-24 rounded-full bg-white/50" />
-            <button
-              type="button"
-              title="Usuń kartę"
-              onClick={() => onChange({ ...config, remember: null })}
-              className="absolute right-2 top-2 z-10 flex size-7 items-center justify-center rounded-full text-[#D15F5F] opacity-0 transition-opacity hover:bg-white group-hover:opacity-100 focus:opacity-100 cursor-pointer disabled:hidden"
-            >
-              <Trash2 className="size-4" />
-            </button>
-            <div className="relative flex items-start gap-3">
-              <Sparkles className="mt-1 size-5 shrink-0" style={{ color: NOTE.color }} />
-              <div className="flex min-w-0 flex-1 flex-col gap-1 pr-4">
-                <div style={{ color: NOTE.color }}>
-                  <InlineText
-                    value={remember.title}
-                    onChange={title => onChange({ ...config, remember: { ...remember, title } })}
-                    maxLength={L.rememberTitle}
-                    placeholder="Tytuł karty"
-                    error={errors['remember.title']}
-                    className="text-[16px] font-bold"
-                  />
-                </div>
-                <InlineText
-                  value={remember.text}
-                  onChange={text => onChange({ ...config, remember: { ...remember, text } })}
-                  maxLength={L.rememberText}
-                  placeholder="Treść, którą użytkownik ma zapamiętać"
-                  error={errors['remember.text']}
-                  className="text-[13px] leading-snug text-dark/85"
-                />
-              </div>
-            </div>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => onChange({ ...config, remember: createContrastNote() })}
-            className="flex w-full items-center justify-center gap-2 rounded-[16px] border border-dashed py-3.5 text-[13px] font-semibold transition-colors hover:bg-[#EAF4FD] cursor-pointer disabled:hidden"
-            style={{ borderColor: `${NOTE.color}80`, color: NOTE.color }}
-          >
-            <Plus className="size-4" /> Dodaj kartę „Zapamiętaj” (opcjonalnie)
-          </button>
-        )}
+        <CalloutField
+          value={config.remember}
+          onChange={remember => onChange({ ...config, remember })}
+          error={errors['remember.text']}
+          placeholder="Treść, którą użytkownik ma zapamiętać"
+        />
       </fieldset>
 
       <p className="mt-3 px-1 text-[12px] leading-snug text-dark/55">
         Każda odpowiedź ma własne wyjaśnienie. Gdy użytkownik zaznaczy kilka odpowiedzi, zobaczy wyjaśnienie każdej z nich, a pod
-        nimi kartę „Zapamiętaj”. Odpowiedź jest poprawna tylko wtedy, gdy zaznaczy dokładnie wszystkie prawidłowe.
+        nimi widżet. Odpowiedź jest poprawna tylko wtedy, gdy zaznaczy dokładnie wszystkie prawidłowe.
       </p>
     </>
   )

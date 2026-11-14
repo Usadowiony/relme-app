@@ -23,7 +23,7 @@ export type BlockFormProps<C> = {
 type InlineTextProps = {
   value: string
   onChange: (value: string) => void
-  maxLength: number
+  maxLength?: number
   placeholder: string
   error?: string
   className?: string

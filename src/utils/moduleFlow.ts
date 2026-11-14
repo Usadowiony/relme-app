@@ -1,8 +1,9 @@
 import type {
   BlockConfigMap,
   BlockType,
+  Callout,
+  CalloutVariant,
   ContrastListCard,
-  ContrastNoteCard,
   ExerciseMessengerConfig,
   ExercisePollConfig,
   ExerciseThoughtRecordConfig,
@@ -11,7 +12,6 @@ import type {
   MessengerExplanation,
   MessengerNode,
   MessengerOption,
-  MessengerWidget,
   ModuleFlowData,
   ModuleView,
   ChoiceOption,
@@ -20,6 +20,9 @@ import type {
   ExerciseOutcome,
   ExercisePatternDetectorConfig,
   ExerciseQuizConfig,
+  KnowledgeElement,
+  KnowledgeElementType,
+  KnowledgeViewConfig,
   ShortConclusion,
 } from '../types/modules'
 import { jsonEqual } from './json'
@@ -29,6 +32,10 @@ import { jsonEqual } from './json'
 // ============================================================
 
 export const MODULE_LIMITS = {
+  // The shared widget (Callout) — the same limit in every block.
+  callout: {
+    text: 400,
+  },
   messenger: {
     optionsPerNode: 3,
     maxDepth: 4, // max number of choices on one path (scenario 1.2.3.1)
@@ -42,8 +49,6 @@ export const MODULE_LIMITS = {
     explBody: 600,
     explPoint: 200,
     maxExplPoints: 5,
-    widgetTitle: 40,
-    widgetText: 300,
     // conclusion per ending scenario
     conclusionTitle: 80,
     conclusionBody: 600,
@@ -61,7 +66,6 @@ export const MODULE_LIMITS = {
     cardTitle: 40,
     lead: 120,
     point: 200,
-    noteText: 300,
   },
   poll: {
     minOptions: 2,
@@ -74,8 +78,6 @@ export const MODULE_LIMITS = {
     // content tab
     minOptions: 3,
     maxOptions: 4,
-    hintTitle: 40,
-    hintText: 300,
     stepTitle: 80,
     stepSubtitle: 120,
     optionLabel: 80,
@@ -88,12 +90,10 @@ export const MODULE_LIMITS = {
     explBody: 800,
     conclusionTitle: 80,
     conclusionBody: 600,
-    widgetTitle: 60,
+    widgetTitle: 60, // titles of the failure-only cards (reaction, reasons, better answer)
     reason: 160,
     minReasons: 2,
     maxReasons: 5,
-    rememberLead: 160,
-    rememberText: 400,
   },
   thoughtRecord: {
     minSteps: 2,
@@ -121,8 +121,6 @@ export const MODULE_LIMITS = {
     resultBody: 300,
     conclusionTitle: 60,
     conclusionBody: 500,
-    rememberTitle: 40,
-    rememberText: 300,
   },
   quiz: {
     instruction: 60,
@@ -131,8 +129,6 @@ export const MODULE_LIMITS = {
     question: 160,
     option: 100,
     explanation: 500,
-    rememberTitle: 40,
-    rememberText: 300,
   },
 } as const
 
@@ -167,15 +163,64 @@ export function normalizeFlow(raw: unknown): ModuleFlowData {
             return { ...view, config: normalizeThoughtRecordConfig(view.config) }
           case 'exercise-i-message':
             return { ...view, config: normalizeIMessageConfig(view.config) }
-          case 'exercise-pattern-detector':
-            return { ...view, config: { ...createDefaultConfig('exercise-pattern-detector'), ...(view.config as object) } }
-          case 'exercise-quiz':
-            return { ...view, config: { ...createDefaultConfig('exercise-quiz'), ...(view.config as object) } }
+          case 'exercise-pattern-detector': {
+            const config: ExercisePatternDetectorConfig = { ...createDefaultConfig('exercise-pattern-detector'), ...(view.config as object) }
+            return { ...view, config: { ...config, remember: normalizeCallout(config.remember, 'remember') } }
+          }
+          case 'exercise-quiz': {
+            const config: ExerciseQuizConfig = { ...createDefaultConfig('exercise-quiz'), ...(view.config as object) }
+            return { ...view, config: { ...config, remember: normalizeCallout(config.remember, 'remember') } }
+          }
+          case 'knowledge-view':
+            return { ...view, config: normalizeKnowledgeViewConfig(view.config) }
         }
       }),
     }
   }
   return createEmptyFlow()
+}
+
+// ============================================================
+// Shared widget (Callout)
+// ============================================================
+
+export const CALLOUT_VARIANTS: readonly CalloutVariant[] = ['remember', 'info', 'golden']
+
+/** Fixed widget titles — not editable (decision 14.11.2026). */
+export const CALLOUT_TITLES: Record<CalloutVariant, string> = {
+  remember: 'Zapamiętaj',
+  info: 'Warto wiedzieć',
+  golden: 'Złota zasada',
+}
+
+export function createCallout(variant: CalloutVariant = 'remember'): Callout {
+  return { variant, text: '' }
+}
+
+/**
+ * Upgrades any stored widget shape to a Callout (missing → null). Older
+ * drafts: Messenger `{ kind: 'remember' | 'golden_rule', title, text }`,
+ * `{ title, text }` and `{ title, lead, text }` (the lead becomes a bold first
+ * paragraph). Custom titles are dropped — the variant decides the title.
+ * The mobile app has the same reader (shared/Callout/readCallout.ts).
+ */
+export function normalizeCallout(raw: unknown, fallback: CalloutVariant): Callout | null {
+  if (!raw || typeof raw !== 'object') return null
+  const r = raw as { variant?: unknown; kind?: unknown; lead?: unknown; text?: unknown }
+  const variant: CalloutVariant = CALLOUT_VARIANTS.includes(r.variant as CalloutVariant)
+    ? (r.variant as CalloutVariant)
+    : r.kind === 'golden_rule'
+      ? 'golden'
+      : r.kind === 'remember'
+        ? 'remember'
+        : fallback
+  const text = typeof r.text === 'string' ? r.text : ''
+  const lead = typeof r.lead === 'string' ? r.lead.replace(/\*\*/g, '').trim() : ''
+  return { variant, text: lead ? `**${lead}**${text.trim() ? `\n${text}` : ''}` : text }
+}
+
+function normalizeOutcome<C extends ShortConclusion>(outcome: ExerciseOutcome<C>): ExerciseOutcome<C> {
+  return { ...outcome, conclusion: { ...outcome.conclusion, remember: normalizeCallout(outcome.conclusion.remember, 'remember') } }
 }
 
 /**
@@ -215,7 +260,7 @@ function normalizeMessengerConfig(raw: unknown): ExerciseMessengerConfig {
         is_correct: !!opt.is_correct,
         explanation:
           typeof opt.explanation === 'object' && opt.explanation
-            ? opt.explanation
+            ? { ...opt.explanation, widget: normalizeCallout(opt.explanation.widget, 'remember') }
             : { ...createMessengerExplanation(), body: opt.explanation ?? '' },
         next: normalizeNode(opt.next),
       })),
@@ -251,7 +296,7 @@ function normalizeContrastConfig(raw: unknown): KnowledgeBehavioralContrastConfi
     cards?: { title?: string; points?: string[] }[]
   }
   if (r.avoid && r.focus) {
-    return { ...defaults, ...r, remember: r.remember ?? null }
+    return { ...defaults, ...r, remember: normalizeCallout(r.remember, 'remember') }
   }
   const [a, f, n] = r.cards ?? []
   const toList = (card: typeof a, fallback: ContrastListCard): ContrastListCard =>
@@ -261,7 +306,7 @@ function normalizeContrastConfig(raw: unknown): KnowledgeBehavioralContrastConfi
     headline: r.headline ?? '',
     avoid: toList(a, defaults.avoid),
     focus: toList(f, defaults.focus),
-    remember: n ? { title: n.title ?? 'Zapamiętaj', text: (n.points ?? []).join(' ') } : null,
+    remember: n ? { variant: 'remember', text: (n.points ?? []).join(' ') } : null,
   }
 }
 
@@ -290,10 +335,10 @@ function normalizeThoughtRecordConfig(raw: unknown): ExerciseThoughtRecordConfig
   }
   return {
     situation: r.situation ?? '',
-    hint: r.hint ?? null,
+    hint: normalizeCallout(r.hint, 'info'),
     steps: r.steps ?? defaults.steps,
-    success: r.success ?? defaults.success,
-    failure,
+    success: normalizeOutcome(r.success ?? defaults.success),
+    failure: normalizeOutcome(failure),
   }
 }
 
@@ -304,16 +349,93 @@ function normalizeIMessageConfig(raw: unknown): ExerciseIMessageConfig {
   return {
     context: r.context ?? defaults.context,
     partner_message: r.partner_message ?? '',
-    hint: r.hint ?? null,
+    hint: normalizeCallout(r.hint, 'info'),
     steps: r.steps ?? defaults.steps,
-    success: r.success ?? defaults.success,
-    failure: r.failure ? { ...r.failure, conclusion: { ...defaults.failure.conclusion, ...r.failure.conclusion } } : defaults.failure,
+    success: normalizeOutcome(r.success ?? defaults.success),
+    failure: normalizeOutcome(
+      r.failure ? { ...r.failure, conclusion: { ...defaults.failure.conclusion, ...r.failure.conclusion } } : defaults.failure,
+    ),
+  }
+}
+
+/**
+ * Keeps only well-formed elements (unknown element types are dropped).
+ * First test drafts (14.11.2026) had `checklist` (now a `list` with ✓ markers)
+ * and headings H1–H3 (the 24 pt H1 was removed, old H3 = new H2).
+ */
+function normalizeKnowledgeViewConfig(raw: unknown): KnowledgeViewConfig {
+  const elements = (raw as Partial<KnowledgeViewConfig> | null)?.elements
+  if (!Array.isArray(elements)) return createDefaultConfig('knowledge-view')
+  return {
+    elements: elements
+      .map(el => {
+        const r = el as { type?: string; level?: number }
+        if (r?.type === 'checklist') return { ...el, type: 'list', marker: 'check' }
+        if (r?.type === 'heading' && r.level === 3) return { ...el, level: 2 }
+        if (r?.type === 'paragraph' || r?.type === 'image-text') {
+          const rest = { ...(el as object) } as Record<string, unknown>
+          delete rest.size // text size option removed (always 16 pt)
+          return rest
+        }
+        if (r?.type === 'callout') {
+          const { id } = el as { id?: string }
+          return { id, type: 'callout', ...normalizeCallout(el, 'remember') } // custom title dropped
+        }
+        return el
+      })
+      .map(el => el as KnowledgeElement)
+      .filter(el => el && typeof el === 'object' && KNOWLEDGE_ELEMENT_TYPES.includes(el.type))
+      .map(el => ({ ...createKnowledgeElement(el.type), ...el }) as KnowledgeElement),
   }
 }
 
 // ============================================================
 // Default configs
 // ============================================================
+
+export const KNOWLEDGE_ELEMENT_TYPES: readonly KnowledgeElementType[] = [
+  'heading',
+  'paragraph',
+  'image-text',
+  'section-title',
+  'list',
+  'steps',
+  'callout',
+  'chat-example',
+]
+
+export function createKnowledgeStep(): { id: string; title: string; text: string } {
+  return { id: createId(), title: '', text: '' }
+}
+
+export function createKnowledgeElement(type: KnowledgeElementType): KnowledgeElement {
+  const id = createId()
+  switch (type) {
+    case 'heading':
+      return { id, type, level: 1, text: '' }
+    case 'paragraph':
+      return { id, type, text: '' }
+    case 'image-text':
+      return { id, type, image_side: 'left', image: { media_id: null }, text: '' }
+    case 'section-title':
+      return { id, type, icon: 'question', text: '' }
+    case 'list':
+      return { id, type, marker: 'check', items: [''] }
+    case 'steps':
+      return { id, type, steps: [createKnowledgeStep(), createKnowledgeStep()] }
+    case 'callout':
+      return { id, type, ...createCallout('remember') }
+    case 'chat-example':
+      return { id, type, message: '', reply: '', verdict: 'good' }
+  }
+}
+
+/** Deep copy with fresh ids (element and its steps). */
+export function duplicateKnowledgeElement(el: KnowledgeElement): KnowledgeElement {
+  const copy = { ...structuredClone(el), id: createId() }
+  if (copy.type === 'steps') copy.steps = copy.steps.map(s => ({ ...s, id: createId() }))
+  return copy
+}
 
 export function createChoiceOption(): ChoiceOption {
   return { id: createId(), label: '', description: '', is_correct: false, explanation: '' }
@@ -373,10 +495,6 @@ export function createMessengerExplanation(): MessengerExplanation {
   return { title: 'Na czym polegał błąd?', body: '', points: [], widget: null }
 }
 
-export function createMessengerWidget(kind: MessengerWidget['kind']): MessengerWidget {
-  return { kind, title: kind === 'remember' ? 'Zapamiętaj' : 'Złota zasada', text: '' }
-}
-
 export function createMessengerNode(message = ''): MessengerNode {
   return { id: createId(), message, options: [], conclusion: createMessengerConclusion() }
 }
@@ -390,10 +508,6 @@ export function createMessengerOptions(): MessengerOption[] {
     explanation: createMessengerExplanation(),
     next: createMessengerNode(),
   }))
-}
-
-export function createContrastNote(): ContrastNoteCard {
-  return { title: 'Zapamiętaj', text: '' }
 }
 
 export function createDefaultConfig<K extends BlockType>(type: K): BlockConfigMap[K] {
@@ -455,6 +569,9 @@ export function createDefaultConfig<K extends BlockType>(type: K): BlockConfigMa
       options: [],
       remember: null,
     }),
+    'knowledge-view': () => ({
+      elements: [{ ...createKnowledgeElement('heading'), level: 1 }, createKnowledgeElement('paragraph')],
+    }),
   }
   return defaults[type]()
 }
@@ -487,6 +604,11 @@ function checkText(
   }
 }
 
+/** The shared widget: only its body is checked (`<key>.text`). */
+function validateCallout(errors: ValidationErrors, key: string, callout: Callout | null) {
+  if (callout) checkText(errors, `${key}.text`, callout.text, MODULE_LIMITS.callout.text, 'Treść widżetu')
+}
+
 // Messenger error keys are id-based (the tree has no stable index paths):
 //   conversation: `node.<id>.message`, `node.<id>.options`, `option.<id>.text`
 //   explanations: `result.<variant>.*`, `option.<id>.explanation.*`, `node.<id>.conclusion.*`
@@ -502,10 +624,7 @@ export function validateMessengerExplanation(optionId: string, e: MessengerExpla
   checkText(errors, `${base}.body`, e.body, L.explBody, 'Rozwinięcie')
   if (e.points.length > L.maxExplPoints) errors[`${base}.points`] = `Maksymalnie ${L.maxExplPoints} podpunktów.`
   e.points.forEach((p, i) => checkText(errors, `${base}.points.${i}`, p, L.explPoint, 'Podpunkt'))
-  if (e.widget) {
-    checkText(errors, `${base}.widget.title`, e.widget.title, L.widgetTitle, 'Tytuł widżetu')
-    checkText(errors, `${base}.widget.text`, e.widget.text, L.widgetText, 'Treść widżetu')
-  }
+  validateCallout(errors, `${base}.widget`, e.widget)
   return errors
 }
 
@@ -583,10 +702,7 @@ function validateContrast(config: KnowledgeBehavioralContrastConfig): Validation
     })
   }
 
-  if (config.remember) {
-    checkText(errors, 'remember.title', config.remember.title, L.cardTitle, 'Tytuł karty')
-    checkText(errors, 'remember.text', config.remember.text, L.noteText, 'Treść')
-  }
+  validateCallout(errors, 'remember', config.remember)
 
   return errors
 }
@@ -612,13 +728,6 @@ function validatePoll(config: ExercisePollConfig): ValidationErrors {
 //   interpretation: `option.<id>.explanation`, `<variant>.{result,explanation,conclusion}.*`
 //                   where <variant> = success | failure
 export const STEP_EXERCISE_INTERPRETATION_KEY = /^(success|failure)\.|\.explanation$/
-
-function validateHint(errors: ValidationErrors, hint: ContrastNoteCard | null) {
-  const L = MODULE_LIMITS.steps
-  if (!hint) return
-  checkText(errors, 'hint.title', hint.title, L.hintTitle, 'Tytuł wskazówki')
-  checkText(errors, 'hint.text', hint.text, L.hintText, 'Treść wskazówki')
-}
 
 function validateChoiceSteps(errors: ValidationErrors, steps: ChoiceStep[]) {
   const L = MODULE_LIMITS.steps
@@ -650,11 +759,7 @@ function validateOutcome(errors: ValidationErrors, variant: 'success' | 'failure
   const c = outcome.conclusion
   checkText(errors, `${p}.conclusion.title`, c.title, L.conclusionTitle, 'Nagłówek')
   checkText(errors, `${p}.conclusion.body`, c.body, L.conclusionBody, 'Rozwinięcie')
-  if (c.remember) {
-    checkText(errors, `${p}.conclusion.remember.title`, c.remember.title, L.widgetTitle, 'Tytuł widżetu')
-    checkText(errors, `${p}.conclusion.remember.lead`, c.remember.lead, L.rememberLead, 'Wyróżnione zdanie')
-    checkText(errors, `${p}.conclusion.remember.text`, c.remember.text, L.rememberText, 'Treść widżetu')
-  }
+  validateCallout(errors, `${p}.conclusion.remember`, c.remember)
 }
 
 function validateReasons(errors: ValidationErrors, reasons: { title: string; points: string[] }) {
@@ -671,7 +776,7 @@ function validateThoughtRecord(config: ExerciseThoughtRecordConfig): ValidationE
   const errors: ValidationErrors = {}
 
   checkText(errors, 'situation', config.situation, L.situation, 'Obraz sytuacji')
-  validateHint(errors, config.hint)
+  validateCallout(errors, 'hint', config.hint)
   if (config.steps.length < L.minSteps || config.steps.length > L.maxSteps) {
     errors.steps = `Ćwiczenie musi mieć od ${L.minSteps} do ${L.maxSteps} kroków.`
   }
@@ -702,7 +807,7 @@ function validateIMessage(config: ExerciseIMessageConfig): ValidationErrors {
   checkText(errors, 'context.title', config.context.title, L.contextTitle, 'Kontekst wiadomości')
   checkText(errors, 'context.body', config.context.body, L.contextBody, 'Opis kontekstu')
   checkText(errors, 'partner_message', config.partner_message, L.partnerMessage, 'Wiadomość partnera')
-  validateHint(errors, config.hint)
+  validateCallout(errors, 'hint', config.hint)
   if (config.steps.length !== L.steps) errors.steps = `Ćwiczenie musi mieć dokładnie ${L.steps} kroki.`
   validateChoiceSteps(errors, config.steps)
 
@@ -737,10 +842,7 @@ function validatePatternDetector(config: ExercisePatternDetectorConfig): Validat
   }
   checkText(errors, 'conclusion.title', config.conclusion.title, L.conclusionTitle, 'Nagłówek')
   checkText(errors, 'conclusion.body', config.conclusion.body, L.conclusionBody, 'Treść wniosków')
-  if (config.remember) {
-    checkText(errors, 'remember.title', config.remember.title, L.rememberTitle, 'Tytuł karty')
-    checkText(errors, 'remember.text', config.remember.text, L.rememberText, 'Treść karty')
-  }
+  validateCallout(errors, 'remember', config.remember)
   return errors
 }
 
@@ -772,10 +874,7 @@ function validateQuiz(config: ExerciseQuizConfig): ValidationErrors {
     checkText(errors, `option.${opt.id}.text`, opt.text, L.option, 'Treść odpowiedzi')
     checkText(errors, `option.${opt.id}.explanation`, opt.explanation, L.explanation, 'Wyjaśnienie')
   }
-  if (config.remember) {
-    checkText(errors, 'remember.title', config.remember.title, L.rememberTitle, 'Tytuł karty')
-    checkText(errors, 'remember.text', config.remember.text, L.rememberText, 'Treść karty')
-  }
+  validateCallout(errors, 'remember', config.remember)
   return errors
 }
 
@@ -795,6 +894,8 @@ export function validateView(view: ModuleView): ValidationErrors {
       return validatePatternDetector(view.config)
     case 'exercise-quiz':
       return validateQuiz(view.config)
+    case 'knowledge-view':
+      return {} // decision 14.11.2026: no limits or required fields — the admin decides
   }
 }
 
@@ -807,7 +908,7 @@ export function validateFlowContent(flow: ModuleFlowData): FlowIssue[] {
     .filter(issue => Object.keys(issue.errors).length > 0)
 }
 
-const KNOWN_BLOCK_TYPES: readonly string[] = ['exercise-messenger', 'knowledge-behavioral-contrast', 'exercise-poll', 'exercise-thought-record', 'exercise-i-message', 'exercise-pattern-detector', 'exercise-quiz']
+const KNOWN_BLOCK_TYPES: readonly string[] = ['exercise-messenger', 'knowledge-behavioral-contrast', 'exercise-poll', 'exercise-thought-record', 'exercise-i-message', 'exercise-pattern-detector', 'exercise-quiz', 'knowledge-view']
 
 /**
  * Structural validation (used before every save). Drafts may hold incomplete

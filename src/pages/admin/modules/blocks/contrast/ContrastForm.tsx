@@ -1,11 +1,12 @@
-import { Image, Lightbulb, Plus, Sparkles, Trash2, X } from 'lucide-react'
+import { Image, Lightbulb, Plus, X } from 'lucide-react'
 import type { ContrastListCard, KnowledgeBehavioralContrastConfig } from '../../../../../types/modules'
-import { MODULE_LIMITS, createContrastNote } from '../../../../../utils/moduleFlow'
+import { MODULE_LIMITS } from '../../../../../utils/moduleFlow'
 import type { ValidationErrors } from '../../../../../utils/moduleFlow'
 import { removeAt, replaceAt } from '../../../../../utils/arrays'
+import { CalloutField } from '../callout/CalloutCard'
 import { InlineText } from '../fields'
 import type { BlockFormProps } from '../fields'
-import { CONTRAST_KICKER_COLOR as KICKER_COLOR, CONTRAST_NOTE as NOTE, CONTRAST_TONES as TONES } from './theme'
+import { CONTRAST_KICKER_COLOR as KICKER_COLOR, CONTRAST_TONES as TONES } from './theme'
 import type { ContrastTone } from './theme'
 
 // Editor that mirrors the mobile screen of this block (mockup: "Lepiej
@@ -14,8 +15,6 @@ import type { ContrastTone } from './theme'
 const L = MODULE_LIMITS.contrast
 
 export function ContrastForm({ config, onChange, errors, readOnly }: BlockFormProps<KnowledgeBehavioralContrastConfig>) {
-  const remember = config.remember
-
   return (
     <fieldset disabled={readOnly} className="min-w-0">
     <div className="relative w-full overflow-hidden rounded-[18px] border border-dark/25 bg-[#FAFAFA] px-5 pt-7 pb-7 sm:px-7 sm:pt-8 sm:pb-8">
@@ -70,54 +69,12 @@ export function ContrastForm({ config, onChange, errors, readOnly }: BlockFormPr
           onChange={focus => onChange({ ...config, focus })}
         />
 
-        {remember ? (
-          <div className="group relative overflow-hidden rounded-[16px] p-5 shadow-sm" style={{ backgroundColor: NOTE.bg }}>
-            <div className="pointer-events-none absolute -left-6 -top-6 size-20 rounded-full bg-white/40" />
-            <div className="pointer-events-none absolute -bottom-8 -right-6 size-24 rounded-full bg-white/50" />
-
-            <button
-              type="button"
-              title="Usuń kartę"
-              onClick={() => onChange({ ...config, remember: null })}
-              className="absolute right-2 top-2 z-10 flex size-7 items-center justify-center rounded-full text-[#D15F5F] opacity-0 transition-opacity hover:bg-white group-hover:opacity-100 focus:opacity-100 cursor-pointer disabled:hidden"
-            >
-              <Trash2 className="size-4" />
-            </button>
-
-            <div className="relative flex items-start gap-3">
-              <Sparkles className="mt-1 size-5 shrink-0" style={{ color: NOTE.color }} />
-              <div className="flex min-w-0 flex-1 flex-col gap-1 pr-4">
-                <div style={{ color: NOTE.color }}>
-                  <InlineText
-                    value={remember.title}
-                    onChange={title => onChange({ ...config, remember: { ...remember, title } })}
-                    maxLength={L.cardTitle}
-                    placeholder="Tytuł karty"
-                    error={errors['remember.title']}
-                    className="text-[17px] font-bold"
-                  />
-                </div>
-                <InlineText
-                  value={remember.text}
-                  onChange={text => onChange({ ...config, remember: { ...remember, text } })}
-                  maxLength={L.noteText}
-                  placeholder="Treść, którą użytkownik ma zapamiętać"
-                  error={errors['remember.text']}
-                  className="text-[14px] leading-snug text-dark/85"
-                />
-              </div>
-            </div>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => onChange({ ...config, remember: createContrastNote() })}
-            className="flex items-center justify-center gap-2 rounded-[16px] border border-dashed py-4 text-[13px] font-semibold transition-colors hover:bg-[#EAF4FD] cursor-pointer disabled:hidden"
-            style={{ borderColor: `${NOTE.color}80`, color: NOTE.color }}
-          >
-            <Plus className="size-4" /> Dodaj kartę „Zapamiętaj” (opcjonalnie)
-          </button>
-        )}
+        <CalloutField
+          value={config.remember}
+          onChange={remember => onChange({ ...config, remember })}
+          error={errors['remember.text']}
+          placeholder="Treść, którą użytkownik ma zapamiętać"
+        />
       </div>
     </div>
     </fieldset>

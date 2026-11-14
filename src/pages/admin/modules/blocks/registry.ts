@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { Flag, ListChecks, MessageCircle, Puzzle, Scale, Sparkles, TextQuote, Users } from 'lucide-react'
+import { BookOpenText, Flag, ListChecks, MessageCircle, Puzzle, Scale, Sparkles, Users } from 'lucide-react'
 import type { BlockConfigMap, BlockType } from '../../../../types/modules'
 import type { BaseModalProps } from '../../../../components/ui/popups/BaseModal'
 import type { BlockFormProps } from './fields'
@@ -18,6 +18,8 @@ import { PatternDetectorForm } from './pattern-detector/PatternDetectorForm'
 import { PatternDetectorSummary } from './pattern-detector/PatternDetectorSummary'
 import { QuizForm } from './quiz/QuizForm'
 import { QuizSummary } from './quiz/QuizSummary'
+import { KnowledgeViewForm } from './knowledge-view/KnowledgeViewForm'
+import { KnowledgeViewSummary } from './knowledge-view/KnowledgeViewSummary'
 
 // ============================================================
 // Block registry — single place that wires a block type to its admin UI.
@@ -36,6 +38,8 @@ type BlockDefinition<K extends BlockType> = {
   category: BlockCategory
   /** Edit popup width — narrow for phone-preview editors, wide for long forms. */
   modalWidth: NonNullable<BaseModalProps['maxWidth']>
+  /** Popup always at full height (content grows a lot while editing). */
+  modalFixedHeight?: boolean
   Form: ComponentType<BlockFormProps<BlockConfigMap[K]>>
   Summary: ComponentType<{ config: BlockConfigMap[K]; color: string }>
 }
@@ -52,6 +56,18 @@ function defineBlock<K extends BlockType>(def: BlockDefinition<K>): AnyBlockDefi
 }
 
 export const BLOCK_REGISTRY: Record<BlockType, AnyBlockDefinition> = {
+  'knowledge-view': defineBlock({
+    type: 'knowledge-view',
+    label: 'Widok wiedzy',
+    description: 'Dowolny układ: tekst, grafiki, listy, karty',
+    icon: BookOpenText,
+    color: '#5B5BD6',
+    category: 'knowledge',
+    modalWidth: '4xl',
+    modalFixedHeight: true,
+    Form: KnowledgeViewForm,
+    Summary: KnowledgeViewSummary,
+  }),
   'knowledge-behavioral-contrast': defineBlock({
     type: 'knowledge-behavioral-contrast',
     label: 'Kontrast Zachowań',
@@ -138,9 +154,7 @@ export function getBlockDefinition(type: BlockType): AnyBlockDefinition {
 // Planned blocks shown greyed out in the library ("wkrótce").
 export type PlannedBlock = { label: string; description: string; icon: LucideIcon; category: BlockCategory }
 
-export const PLANNED_BLOCKS: PlannedBlock[] = [
-  { label: 'Concept Text', description: 'Krótki tekst, max 300 znaków', icon: TextQuote, category: 'knowledge' },
-]
+export const PLANNED_BLOCKS: PlannedBlock[] = []
 
 export const CATEGORY_LABELS: Record<BlockCategory, string> = {
   knowledge: 'Podawanie wiedzy',

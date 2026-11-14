@@ -1,5 +1,8 @@
 import type { ContrastListCard, KnowledgeBehavioralContrastConfig } from '../../../../../types/modules'
-import { CONTRAST_NOTE, CONTRAST_TONES } from './theme'
+import { CALLOUT_TITLES } from '../../../../../utils/moduleFlow'
+import { richToPlain } from '../../../../../utils/richText'
+import { CALLOUTS } from '../callout/theme'
+import { CONTRAST_TONES } from './theme'
 import type { ContrastTone } from './theme'
 
 // Compact timeline summary in the same "Label: value" style as Messenger.
@@ -29,7 +32,9 @@ export function ContrastSummary({ config, color }: { config: KnowledgeBehavioral
       <CardRows tone="avoid" card={config.avoid} />
       <CardRows tone="focus" card={config.focus} />
       {config.remember && (
-        <Row label={value(config.remember.title)} color={CONTRAST_NOTE.color}>{value(config.remember.text)}</Row>
+        <Row label={CALLOUT_TITLES[config.remember.variant]} color={CALLOUTS[config.remember.variant].accent}>
+          {value(richToPlain(config.remember.text))}
+        </Row>
       )}
     </div>
   )

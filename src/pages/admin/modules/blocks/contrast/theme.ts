@@ -11,5 +11,4 @@ export const CONTRAST_TONES = {
 
 export type ContrastTone = keyof typeof CONTRAST_TONES
 
-export const CONTRAST_NOTE = { color: '#3B8FD9', bg: '#EAF4FD' }
 export const CONTRAST_KICKER_COLOR = '#2B6E78'

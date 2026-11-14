@@ -6,7 +6,6 @@ export const PD = {
   teal: '#2B6E78',
   screen: '#F4F4F4',
   neutral: '#EEEFEF', // tappable neutral fragment in the app
-  remember: { color: '#3B8FD9', bg: '#EAF4FD' },
   conclusion: { color: '#3E8E6B', bg: '#F3F8F5', border: '#DCEAE1' },
 }
 

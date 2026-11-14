@@ -1,7 +1,8 @@
-import { Check, ChevronRight, ChevronUp, Plus, Sparkles, Trash2 } from 'lucide-react'
-import type { ChoiceOption, ChoiceStep, ContrastNoteCard } from '../../../../../types/modules'
-import { MODULE_LIMITS, createChoiceOption, createChoiceStep, createContrastNote } from '../../../../../utils/moduleFlow'
+import { Check, ChevronRight, ChevronUp, Plus, Trash2 } from 'lucide-react'
+import type { Callout, ChoiceOption, ChoiceStep } from '../../../../../types/modules'
+import { MODULE_LIMITS, createChoiceOption, createChoiceStep } from '../../../../../utils/moduleFlow'
 import type { ValidationErrors } from '../../../../../utils/moduleFlow'
+import { CalloutField } from '../callout/CalloutCard'
 import { AddLink, InlineText, RemoveButton } from '../fields'
 import { CARD_CLASS, TR } from './theme'
 
@@ -10,62 +11,14 @@ import { CARD_CLASS, TR } from './theme'
 
 const L = MODULE_LIMITS.steps
 
-// --- Optional hint ---
+// --- Optional widget on the exercise screen ---
 
 export function HintCard({ hint, errors, onChange }: {
-  hint: ContrastNoteCard | null
+  hint: Callout | null
   errors: ValidationErrors
-  onChange: (hint: ContrastNoteCard | null) => void
+  onChange: (hint: Callout | null) => void
 }) {
-  if (!hint) {
-    return (
-      <button
-        type="button"
-        onClick={() => onChange({ ...createContrastNote(), title: 'Wskazówka' })}
-        className="flex w-full items-center justify-center gap-2 rounded-[16px] border border-dashed py-3.5 text-[13px] font-semibold transition-colors hover:bg-[#EAF4FD] cursor-pointer disabled:hidden"
-        style={{ borderColor: `${TR.hint.color}80`, color: TR.hint.color }}
-      >
-        <Plus className="size-4" /> Dodaj wskazówkę (opcjonalnie)
-      </button>
-    )
-  }
-
-  return (
-    <div className="group relative overflow-hidden rounded-[16px] p-4 shadow-sm" style={{ backgroundColor: TR.hint.bg }}>
-      <div className="pointer-events-none absolute -bottom-8 -right-6 size-24 rounded-full bg-white/50" />
-      <button
-        type="button"
-        title="Usuń wskazówkę"
-        onClick={() => onChange(null)}
-        className="absolute right-2 top-2 z-10 flex size-7 items-center justify-center rounded-full text-[#D15F5F] opacity-0 transition-opacity hover:bg-white group-hover:opacity-100 focus:opacity-100 cursor-pointer disabled:hidden"
-      >
-        <Trash2 className="size-4" />
-      </button>
-      <div className="relative flex items-start gap-3">
-        <Sparkles className="mt-1 size-5 shrink-0" style={{ color: TR.hint.color }} />
-        <div className="flex min-w-0 flex-1 flex-col gap-1 pr-4">
-          <div style={{ color: TR.hint.color }}>
-            <InlineText
-              value={hint.title}
-              onChange={title => onChange({ ...hint, title })}
-              maxLength={L.hintTitle}
-              placeholder="Tytuł wskazówki"
-              error={errors['hint.title']}
-              className="text-[16px] font-bold"
-            />
-          </div>
-          <InlineText
-            value={hint.text}
-            onChange={text => onChange({ ...hint, text })}
-            maxLength={L.hintText}
-            placeholder="Treść wskazówki"
-            error={errors['hint.text']}
-            className="text-[13px] leading-snug text-dark/85"
-          />
-        </div>
-      </div>
-    </div>
-  )
+  return <CalloutField value={hint} onChange={onChange} error={errors['hint.text']} placeholder="Podpowiedź do ćwiczenia" />
 }
 
 // --- Steps card ---

@@ -1,24 +1,19 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { Check, CircleCheck, CircleX, Lightbulb, Plus, Sparkles, Trash2, X } from 'lucide-react'
+import { Check, CircleCheck, CircleX, X } from 'lucide-react'
 import type {
   ExerciseMessengerConfig,
   MessengerConclusion,
   MessengerExplanation,
   MessengerNode,
   MessengerOption,
-  MessengerWidget,
   OutcomeVariant,
   TextBlock,
 } from '../../../../../types/modules'
-import {
-  MODULE_LIMITS,
-  createMessengerWidget,
-  validateMessengerConclusion,
-  validateMessengerExplanation,
-} from '../../../../../utils/moduleFlow'
+import { MODULE_LIMITS, validateMessengerConclusion, validateMessengerExplanation } from '../../../../../utils/moduleFlow'
 import type { ValidationErrors } from '../../../../../utils/moduleFlow'
 import { removeAt, replaceAt } from '../../../../../utils/arrays'
+import { CalloutField } from '../callout/CalloutCard'
 import { AddLink, FormattingHint, InlineText, RemoveButton } from '../fields'
 import { CONTACT_BUBBLE, MSG_GREEN, MSG_RED } from './theme'
 import { AvatarCircle, PhoneFrame } from './MessengerFrame'
@@ -29,11 +24,6 @@ import { AvatarCircle, PhoneFrame } from './MessengerFrame'
 // ("Czas na wnioski") per ending scenario reached with a wrong answer.
 
 const L = MODULE_LIMITS.messenger
-
-const WIDGETS: Record<MessengerWidget['kind'], { label: string; icon: typeof Sparkles; color: string; bg: string }> = {
-  remember: { label: 'Zapamiętaj', icon: Sparkles, color: '#3B8FD9', bg: '#EAF4FD' },
-  golden_rule: { label: 'Złota zasada', icon: Lightbulb, color: '#E39B2D', bg: '#FFF4E3' },
-}
 
 const RESULT_VARIANTS: { variant: OutcomeVariant; label: string; color: string; placeholder: string }[] = [
   { variant: 'success', label: 'Odpowiedzi prawidłowe', color: MSG_GREEN, placeholder: 'Np. „Twoje odpowiedzi wspierały partnerkę.”' },
@@ -334,79 +324,13 @@ function AnswerExplanation({ item, errors, onChange }: {
       )}
 
       <div className="mt-5">
-        {e.widget ? (
-          <WidgetCard
-            widget={e.widget}
-            errors={errors}
-            base={`${base}.widget`}
-            onChange={widget => onChange({ ...e, widget })}
-            onRemove={() => onChange({ ...e, widget: null })}
-          />
-        ) : (
-          <div className="flex gap-2">
-            {(Object.keys(WIDGETS) as MessengerWidget['kind'][]).map(kind => (
-              <button
-                key={kind}
-                type="button"
-                onClick={() => onChange({ ...e, widget: createMessengerWidget(kind) })}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-[14px] border border-dashed py-3 text-[12px] font-semibold transition-colors cursor-pointer disabled:hidden"
-                style={{ borderColor: `${WIDGETS[kind].color}80`, color: WIDGETS[kind].color }}
-              >
-                <Plus className="size-3.5" /> {WIDGETS[kind].label}
-              </button>
-            ))}
-          </div>
-        )}
+        <CalloutField
+          value={e.widget}
+          onChange={widget => onChange({ ...e, widget })}
+          error={errors[`${base}.widget.text`]}
+        />
       </div>
     </PhoneFrame>
-  )
-}
-
-function WidgetCard({ widget, errors, base, onChange, onRemove }: {
-  widget: MessengerWidget
-  errors: ValidationErrors
-  base: string
-  onChange: (w: MessengerWidget) => void
-  onRemove: () => void
-}) {
-  const w = WIDGETS[widget.kind]
-  const Icon = w.icon
-  return (
-    <div className="group relative overflow-hidden rounded-[16px] p-4 shadow-sm" style={{ backgroundColor: w.bg }}>
-      <div className="pointer-events-none absolute -bottom-8 -right-6 size-24 rounded-full bg-white/50" />
-      <button
-        type="button"
-        title="Usuń widżet"
-        onClick={onRemove}
-        className="absolute right-2 top-2 z-10 flex size-7 items-center justify-center rounded-full text-[#D15F5F] opacity-0 transition-opacity hover:bg-white group-hover:opacity-100 focus:opacity-100 cursor-pointer disabled:hidden"
-      >
-        <Trash2 className="size-4" />
-      </button>
-      <div className="relative flex items-start gap-3">
-        <Icon className="mt-1 size-5 shrink-0" style={{ color: w.color }} />
-        <div className="flex min-w-0 flex-1 flex-col gap-1 pr-4">
-          <div style={{ color: w.color }}>
-            <InlineText
-              value={widget.title}
-              onChange={title => onChange({ ...widget, title })}
-              maxLength={L.widgetTitle}
-              placeholder="Tytuł widżetu"
-              error={errors[`${base}.title`]}
-              className="text-[16px] font-bold"
-            />
-          </div>
-          <InlineText
-            value={widget.text}
-            onChange={text => onChange({ ...widget, text })}
-            maxLength={L.widgetText}
-            rich
-            placeholder="Treść widżetu"
-            error={errors[`${base}.text`]}
-            className="text-[13px] leading-snug text-dark/85"
-          />
-        </div>
-      </div>
-    </div>
   )
 }
 

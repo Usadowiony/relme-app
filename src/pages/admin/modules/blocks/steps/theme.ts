@@ -6,8 +6,7 @@ export const TR = {
   green: '#3E8E6B',
   red: '#E0565B',
   screen: '#F4F4F4',
-  hint: { color: '#3B8FD9', bg: '#EAF4FD' }, // "Wskazówka"
-  remember: { color: '#6B5FD3', bg: '#F1EFFC' }, // "Zapamiętaj" in the conclusion
+  remember: { color: '#6B5FD3', bg: '#F1EFFC' }, // accent of the "Jak powinna wyglądać reakcja?" card
 }
 
 /** Grey screen behind the white cards (phone-preview frame). */

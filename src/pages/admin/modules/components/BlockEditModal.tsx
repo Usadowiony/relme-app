@@ -5,6 +5,7 @@ import { BaseModal } from '../../../../components/ui/popups/BaseModal'
 import { ConfirmDialog } from '../../../../components/ui/popups/ConfirmDialog'
 import { AsyncButton } from '../../../../components/ui/buttons/Button'
 import { getBlockDefinition } from '../blocks/registry'
+import { EditorReadOnlyContext } from '../blocks/rich/richFormatContext'
 
 type BlockEditModalProps = {
   type: BlockType
@@ -56,6 +57,7 @@ export function BlockEditModal({ type, initialConfig, viewNumber, isNew, readOnl
         isOpen
         onClose={requestClose}
         maxWidth={def.modalWidth}
+        fixedHeight={def.modalFixedHeight}
         subtitle={`${readOnly ? 'Podgląd' : 'Edycja'} bloku ${def.label}, widok #${viewNumber}`}
         title={def.label}
         footer={
@@ -77,7 +79,10 @@ export function BlockEditModal({ type, initialConfig, viewNumber, isNew, readOnl
             Możesz go zapisać i dokończyć później, ale wersji z niekompletnym blokiem nie da się opublikować.
           </div>
         )}
-        <Form config={config} onChange={setConfig} errors={errors} readOnly={readOnly} />
+        {/* contentEditable fields ignore <fieldset disabled> — they read this context instead. */}
+        <EditorReadOnlyContext.Provider value={readOnly}>
+          <Form config={config} onChange={setConfig} errors={errors} readOnly={readOnly} />
+        </EditorReadOnlyContext.Provider>
       </BaseModal>
 
       <ConfirmDialog

@@ -9,7 +9,9 @@ export type BaseModalProps = {
   subtitle: string
   children: ReactNode
   footer: ReactNode
-  maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl'
+  maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '4xl'
+  /** Always the maximum height (90vh) instead of growing with the content — no jumping while editing. */
+  fixedHeight?: boolean
 }
 
 export function BaseModal({
@@ -19,7 +21,8 @@ export function BaseModal({
   subtitle,
   children,
   footer,
-  maxWidth = 'lg'
+  maxWidth = 'lg',
+  fixedHeight = false
 }: BaseModalProps) {
   const [isClosing, setIsClosing] = useState(false)
 
@@ -45,7 +48,8 @@ export function BaseModal({
     md: 'max-w-md',
     lg: 'max-w-lg',
     xl: 'max-w-xl',
-    '2xl': 'max-w-2xl'
+    '2xl': 'max-w-2xl',
+    '4xl': 'max-w-4xl'
   }[maxWidth]
 
   return (
@@ -58,7 +62,7 @@ export function BaseModal({
 
       {/* Modal Container */}
       <div
-        className={`relative bg-white w-full ${maxWidthClass} rounded-[24px] shadow-2xl flex flex-col max-h-[90vh] ${isClosing ? 'animate-slide-down' : 'animate-slide-up'}`}
+        className={`relative bg-white w-full ${maxWidthClass} rounded-[24px] shadow-2xl flex flex-col ${fixedHeight ? 'h-[90vh]' : 'max-h-[90vh]'} ${isClosing ? 'animate-slide-down' : 'animate-slide-up'}`}
       >
         {/* Header */}
         <div className="flex justify-between items-start pt-10 pb-6 px-8 shrink-0">
@@ -79,7 +83,7 @@ export function BaseModal({
         </div>
 
         {/* Content (Scrollable) */}
-        <div className="py-6 px-8 flex flex-col gap-8 overflow-y-auto custom-scrollbar">
+        <div className={`py-6 px-8 flex flex-col gap-8 overflow-y-auto custom-scrollbar ${fixedHeight ? 'flex-1 min-h-0' : ''}`}>
           {children}
         </div>
 

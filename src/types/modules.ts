@@ -19,6 +19,28 @@ export type BlockType =
   | 'exercise-i-message'
   | 'exercise-pattern-detector'
   | 'exercise-quiz'
+  | 'knowledge-view'
+
+// ============================================================
+// SHARED WIDGET
+// ============================================================
+
+// --- Callout ("widżet") ---
+// One widget for the whole app (decision 14.11.2026), wherever a block has
+// one: "Zapamiętaj", hints, "Złota zasada"… The admin picks one of 3
+// variants; the TITLE IS NOT DATA — it is fixed by the variant (CALLOUT_TITLES):
+//   remember: indigo "Zapamiętaj" (sparkles) · info: blue "Warto wiedzieć" (info)
+//   golden: amber "Złota zasada" (lightbulb)
+// Body: [B] bold only, multiline (see utils/richText.ts); colour fixed by the
+// variant. Older drafts ({ title, text }, { title, lead, text }, Messenger
+// { kind, title, text }) are upgraded by normalizeCallout (moduleFlow.ts);
+// the mobile app reads the old shapes too (published versions are frozen).
+export type CalloutVariant = 'remember' | 'info' | 'golden'
+
+export type Callout = {
+  variant: CalloutVariant
+  text: string
+}
 
 // ============================================================
 // BLOCK CONFIGS
@@ -38,17 +60,11 @@ export type BlockType =
 // every pick on the path the contact's message, the picked answer and that
 // option's `explanation`; then — only after a wrong path — the `conclusion`
 // of the node where the conversation ended ("Czas na wnioski").
-export type MessengerWidget = {
-  kind: 'remember' | 'golden_rule' // "Zapamiętaj" (blue) / "Złota zasada" (amber)
-  title: string
-  text: string
-}
-
 export type MessengerExplanation = {
   title: string // default "Na czym polegał błąd?"
   body: string
   points: string[] // optional bullet list (0..max)
-  widget: MessengerWidget | null
+  widget: Callout | null
 }
 
 export type MessengerConclusion = {
@@ -85,16 +101,11 @@ export type ExerciseMessengerConfig = {
 // --- knowledge-behavioral-contrast ---
 // One reading screen: kicker (default "Szybkie przypomnienie:"), headline,
 // a red "avoid" card ("Zamiast"), a green "focus" card ("Skup się na") and an
-// optional blue "remember" note ("Zapamiętaj"). Card titles are editable.
+// optional widget (Callout). Titles of the red / green cards are editable.
 export type ContrastListCard = {
   title: string
   lead: string // required "rozwinięcie" under the title, e.g. "Reagować oskarżeniami poprzez"
   points: string[]
-}
-
-export type ContrastNoteCard = {
-  title: string
-  text: string
 }
 
 export type KnowledgeBehavioralContrastConfig = {
@@ -102,7 +113,7 @@ export type KnowledgeBehavioralContrastConfig = {
   headline: string
   avoid: ContrastListCard
   focus: ContrastListCard
-  remember: ContrastNoteCard | null
+  remember: Callout | null
 }
 
 // --- exercise-poll ---
@@ -149,15 +160,13 @@ export type ChoiceStep = {
 
 export type TextBlock = { title: string; body: string }
 
-export type RememberWidget = { title: string; lead: string; text: string } // "Zapamiętaj" (lead shown in bold)
-
 export type ReasonsList = { title: string; points: string[] } // "Dlaczego to działa?"
 
 /** Short conclusion after a fully correct attempt. */
 export type ShortConclusion = {
   title: string // default "Czas na wnioski"
   body: string
-  remember: RememberWidget | null
+  remember: Callout | null
 }
 
 export type ExerciseOutcome<C> = {
@@ -185,7 +194,7 @@ export type ThoughtRecordConclusion = ShortConclusion & {
 
 export type ExerciseThoughtRecordConfig = {
   situation: string // "Obraz sytuacji"
-  hint: ContrastNoteCard | null // optional "Wskazówka"
+  hint: Callout | null // optional widget on the exercise screen (default variant: info)
   steps: ChoiceStep[]
   success: ExerciseOutcome<ShortConclusion>
   failure: ExerciseOutcome<ThoughtRecordConclusion>
@@ -205,7 +214,7 @@ export type IMessageConclusion = ShortConclusion & {
 export type ExerciseIMessageConfig = {
   context: TextBlock // "Kontekst wiadomości" + its description
   partner_message: string // the partner's chat bubble
-  hint: ContrastNoteCard | null // optional "Wskazówka"
+  hint: Callout | null // optional widget on the exercise screen (default variant: info)
   steps: ChoiceStep[] // exactly 4
   success: ExerciseOutcome<ShortConclusion>
   failure: ExerciseOutcome<IMessageConclusion>
@@ -240,7 +249,7 @@ export type ExercisePatternDetectorConfig = {
   flags: PatternFlag[] // sorted by start, non-overlapping
   result: TextBlock // "Analiza wykrytych sygnałów" + intro
   conclusion: TextBlock // "Czas na wnioski"
-  remember: ContrastNoteCard | null // optional "Zapamiętaj"
+  remember: Callout | null // optional widget
 }
 
 // --- exercise-quiz ---
@@ -264,7 +273,64 @@ export type ExerciseQuizConfig = {
   /** Optional illustration slot; the picture itself comes with the media library (null media = not chosen yet). */
   image: { media_id: string | null } | null
   options: QuizOption[]
-  remember: ContrastNoteCard | null
+  remember: Callout | null
+}
+
+// --- knowledge-view ---
+// "Widok wiedzy" (progress label in the app: "Dawka wiedzy"). A free-form
+// reading screen: an ordered list of elements the admin adds, removes and
+// reorders. No answers, no validation — the view is passed once displayed.
+//
+// Formatted text: see utils/richText.ts — `**bold**`, `{zielony}coloured{/}`
+// (palette TEXT_COLORS), `\n` = new paragraph. Per field below:
+//   [B+C] bold and colours, [C] colours only, [B] bold only, no tag = plain
+//   text; "multiline" = may contain `\n`. Formatting never crosses a line break.
+//
+// Spacing between elements (mobile): 16 pt; 26 pt when either neighbour is a
+// list, steps, callout or chat example — except right after a section title,
+// which always keeps 16 pt to the content it introduces.
+//
+// Type scale (decision 14.11.2026) — Plus Jakarta Sans only, 4 steps:
+//   H1 20/28 extrabold · H2 18/24 extrabold (H2, section title, callout title)
+//   text 16/24 (paragraph, image text, list; step title bold)
+//   small 14/20 (callout body light, step description) · chat bubbles 13/18
+// Colours: headings #141F36, text #1D232B.
+
+export type KnowledgeSectionIcon = 'question' | 'wrong' | 'chat-good' | 'good'
+
+export type KnowledgeListMarker = 'check' | 'cross' | 'dot' // green ✓ / red ✕ / dot
+
+export type KnowledgeStep = { id: string; title: string; text: string /* plain, multiline */ }
+
+export type KnowledgeElement =
+  // H1 = 20 pt; H2 = 18 pt, the same style as a section title without the icon
+  | { id: string; type: 'heading'; level: 1 | 2; text: string /* [C] */ }
+  | { id: string; type: 'paragraph'; text: string /* [B+C], multiline */ }
+  | {
+      id: string
+      type: 'image-text'
+      image_side: 'left' | 'right'
+      /** 141×114, radius 32. The picture comes with the media library (null media = empty placeholder in the app). */
+      image: { media_id: string | null }
+      text: string // [B+C], multiline
+    }
+  | { id: string; type: 'section-title'; icon: KnowledgeSectionIcon; text: string /* [C] */ }
+  | { id: string; type: 'list'; marker: KnowledgeListMarker; items: string[] /* plain, 16 pt */ }
+  | { id: string; type: 'steps'; steps: KnowledgeStep[] } // numbered timeline 1, 2, 3…
+  | ({ id: string; type: 'callout' } & Callout) // the shared widget (title fixed by the variant)
+  | {
+      id: string
+      type: 'chat-example'
+      /** The other person's message; avatar picked by the app (as in Messenger). */
+      message: string
+      reply: string
+      verdict: 'good' | 'bad'
+    }
+
+export type KnowledgeElementType = KnowledgeElement['type']
+
+export type KnowledgeViewConfig = {
+  elements: KnowledgeElement[]
 }
 
 export type BlockConfigMap = {
@@ -275,6 +341,7 @@ export type BlockConfigMap = {
   'exercise-i-message': ExerciseIMessageConfig
   'exercise-pattern-detector': ExercisePatternDetectorConfig
   'exercise-quiz': ExerciseQuizConfig
+  'knowledge-view': KnowledgeViewConfig
 }
 
 // --- Views ---
